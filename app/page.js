@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -69,7 +70,11 @@ function generateSlots() {
 
 function sameDay(first, second) {
   if (!first || !second) return false;
-  return new Date(first).getTime() === new Date(second).getTime();
+
+  return (
+    new Date(first).getTime() ===
+    new Date(second).getTime()
+  );
 }
 
 // ============================================================
@@ -114,6 +119,7 @@ export default function Home() {
       options.headers = {
         "Content-Type": "application/json",
       };
+
       options.body = JSON.stringify({
         action,
         ...values,
@@ -152,6 +158,7 @@ export default function Home() {
   const loadPlayers = useCallback(async () => {
     try {
       const result = await apiRequest(null);
+
       setPlayers(result.players || []);
       setAccount(result.account || null);
     } catch (error) {
@@ -211,6 +218,7 @@ export default function Home() {
 
       setPin("");
       setInviteCode("");
+
       await loadPlayers();
     } catch (error) {
       setNotice(error.message);
@@ -237,6 +245,7 @@ export default function Home() {
       setCurrentPin("");
       setNewPin("");
       setConfirmPin("");
+
       setNotice("Sesión cerrada.");
     } catch (error) {
       setNotice(error.message);
@@ -316,7 +325,9 @@ export default function Home() {
     }
 
     if (account.must_change_pin) {
-      setNotice("Debes cambiar tu PIN temporal antes de continuar.");
+      setNotice(
+        "Debes cambiar tu PIN temporal antes de continuar."
+      );
       return;
     }
 
@@ -336,7 +347,9 @@ export default function Home() {
 
     try {
       await apiRequest("join", { day });
+
       await loadPlayers();
+
       setNotice("Te has apuntado a la partida.");
     } catch (error) {
       setNotice(error.message);
@@ -353,7 +366,7 @@ export default function Home() {
   function canLeave(player) {
     return Boolean(
       account &&
-        player.name &&
+        player?.name &&
         account.name &&
         player.name.trim().toLowerCase() ===
           account.name.trim().toLowerCase()
@@ -371,12 +384,15 @@ export default function Home() {
     }
 
     if (account.must_change_pin) {
-      setNotice("Debes cambiar tu PIN temporal antes de continuar.");
+      setNotice(
+        "Debes cambiar tu PIN temporal antes de continuar."
+      );
       return;
     }
 
     if (busy) return;
 
+    // Localizar la inscripción seleccionada.
     const player = players.find(
       (item) => String(item.id) === String(id)
     );
@@ -386,19 +402,38 @@ export default function Home() {
       return;
     }
 
+    // Validar que la inscripción pertenece al usuario.
+    if (!canLeave(player)) {
+      setNotice(
+        "Solo puedes desapuntar tu propia inscripción."
+      );
+      return;
+    }
+
+    // No bloquear la operación por estar la pista completa
+    // ni por el estado reservado de la inscripción.
     setBusy(true);
     setNotice("");
 
     try {
       await apiRequest("leave", {
-        id,
+        id: player.id,
         day: player.day,
       });
 
       await loadPlayers();
-      setNotice("Te has desapuntado de la partida.");
+
+      setNotice(
+        "Te has desapuntado de la partida correctamente."
+      );
     } catch (error) {
-      setNotice(error.message);
+      console.error("Error al desapuntarse:", error);
+
+      setNotice(
+        error.message ||
+          "No se ha podido eliminar tu inscripción."
+      );
+
       await loadPlayers();
     } finally {
       setBusy(false);
@@ -410,7 +445,9 @@ export default function Home() {
   // ==========================================================
 
   function openResasports() {
-    const bookingUrl = "https://centro.resasports.com/login";
+    const bookingUrl =
+      "https://centro.resasports.com/login";
+
     const packageName = "com.Nubapp.LesJoueurs";
 
     const playStoreUrl =
@@ -494,7 +531,9 @@ export default function Home() {
     }
 
     if (account.must_change_pin) {
-      setNotice("Debes cambiar tu PIN temporal antes de continuar.");
+      setNotice(
+        "Debes cambiar tu PIN temporal antes de continuar."
+      );
       return;
     }
 
@@ -545,7 +584,7 @@ export default function Home() {
         "Marcada en la web. Comprueba y completa la reserva en ResaSports."
       );
 
-      // Esto abre ResaSports, pero no confirma la reserva dentro de esa app.
+      // Abre ResaSports, pero no confirma la reserva en esa app.
       openResasports();
     } catch (error) {
       setNotice(error.message);
@@ -606,13 +645,17 @@ export default function Home() {
       );
 
     const responsible =
-      playersForDay.length === 4 ? playersForDay[3] : null;
+      playersForDay.length === 4
+        ? playersForDay[3]
+        : null;
 
     const reserved = responsible?.reserved === true;
+
     const isResponsible =
       responsible && canLeave(responsible);
 
     const isFull = playersForDay.length >= 4;
+
     const pinChangeRequired =
       account?.must_change_pin === true;
 
@@ -669,6 +712,7 @@ export default function Home() {
             }`}
         </div>
 
+        {/* Botón para apuntarse. */}
         <div>
           <button
             onClick={() => join(slot.id)}
@@ -740,16 +784,21 @@ export default function Home() {
                   }}
                 >
                   {player.name}
-                  {isResponsiblePlayer ? " 👑 Responsable" : ""}
+                  {isResponsiblePlayer
+                    ? " 👑 Responsable"
+                    : ""}
                 </span>
 
+                {/* Solo se muestra al propietario de la inscripción. */}
                 {canLeave(player) && (
                   <button
+                    type="button"
                     onClick={() => leave(player.id)}
-                    disabled={
-                      busy ||
-                      player.reserved === true ||
+                    disabled={busy || pinChangeRequired}
+                    title={
                       pinChangeRequired
+                        ? "Primero debes cambiar tu PIN"
+                        : "Eliminar tu inscripción"
                     }
                     style={{
                       ...buttonStyle,
@@ -855,8 +904,7 @@ export default function Home() {
         boxSizing: "border-box",
         margin: "0 auto",
         padding: "20px",
-        fontFamily:
-          "Arial, Helvetica, sans-serif",
+        fontFamily: "Arial, Helvetica, sans-serif",
         color: "#1F2937",
         backgroundColor: "#F8FAFC",
         minHeight: "100vh",
@@ -895,6 +943,7 @@ export default function Home() {
         }
       `}</style>
 
+      {/* Cabecera. */}
       <header
         style={{
           padding: "24px",
@@ -929,7 +978,13 @@ export default function Home() {
           🎾 Reserva de Pádel
         </h1>
 
-        <p style={{ margin: 0, opacity: 0.95, textAlign: "center"}}>
+        <p
+          style={{
+            margin: 0,
+            opacity: 0.95,
+            textAlign: "center",
+          }}
+        >
           Organiza tus partidas y encuentra tu próximo partido.
         </p>
       </header>
@@ -1247,19 +1302,27 @@ export default function Home() {
       )}
 
       {loading && (
-        <p style={{ color: "#64748B" }}>Cargando partidas...</p>
+        <p style={{ color: "#64748B" }}>
+          Cargando partidas...
+        </p>
       )}
 
       {/* Las dos semanas de partidas. */}
       {!account?.must_change_pin && (
         <div className="weeks-grid">
           <section className="week-column">
-            <h2 className="week-heading">📅 Esta semana</h2>
+            <h2 className="week-heading">
+              📅 Esta semana
+            </h2>
+
             {thisWeek.map(renderSlot)}
           </section>
 
           <section className="week-column">
-            <h2 className="week-heading">📅 Próxima semana</h2>
+            <h2 className="week-heading">
+              📅 Próxima semana
+            </h2>
+
             {nextWeek.map(renderSlot)}
           </section>
         </div>
