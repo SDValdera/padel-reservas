@@ -70,7 +70,7 @@ async function hashPin(pin) {
   const salt = randomBytes(16).toString("hex");
   const derived = await scrypt(pin, salt, 64);
 
-  return `scrypt$${salt}$${derived.toString("hex")}`;
+   return "scrypt$" + salt + "$" + derived.toString("hex");
 }
 
 // Verificar un PIN sin comparaciones de cadenas vulnerables.
