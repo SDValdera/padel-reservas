@@ -1,4 +1,4 @@
-
+```javascript
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 import {
@@ -106,6 +106,7 @@ async function verifyPin(pin, storedHash) {
 // COOKIES DE SESIÓN DE JUGADORES
 // ======================================================
 
+// El token real solo se envía en la cookie; en la BD se guarda su hash.
 function sessionCookie(response, token) {
   response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
@@ -118,6 +119,7 @@ function sessionCookie(response, token) {
   return response;
 }
 
+// Eliminar la cookie del jugador.
 function clearSessionCookie(response) {
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
@@ -221,7 +223,7 @@ function clearAdminCookie(response) {
 // CREACIÓN Y COMPROBACIÓN DE SESIONES DE JUGADORES
 // ======================================================
 
-// El token real solo se envía en la cookie; en la BD se guarda su hash.
+// Crear sesión y almacenar únicamente el hash del token.
 async function createSession(accountId) {
   const token = randomBytes(32).toString("hex");
   const tokenHash = hashText(token);
@@ -270,7 +272,7 @@ async function getAccountFromRequest(request) {
     return null;
   }
 
-  // Es importante incluir must_change_pin en la cuenta.
+  // Consultar la cuenta y comprobar que está activa.
   const { data: account, error: accountError } = await supabaseAdmin
     .from("player_accounts")
     .select("id, name, active, must_change_pin")
@@ -371,7 +373,11 @@ export async function GET(request) {
             }
           : null,
       },
-      { headers: { "Cache-Control": "no-store" } }
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   } catch (error) {
     console.error("Error en GET:", error);
@@ -427,7 +433,11 @@ export async function POST(request) {
         hashText(configuredPassword),
         "hex"
       );
-      const actual = Buffer.from(hashText(body.password), "hex");
+
+      const actual = Buffer.from(
+        hashText(body.password),
+        "hex"
+      );
 
       if (!timingSafeEqual(expected, actual)) {
         return jsonError("Contraseña incorrecta.", 401);
@@ -574,7 +584,10 @@ export async function POST(request) {
           updateError.message
         );
 
-        return jsonError("No se ha podido restablecer el PIN.", 500);
+        return jsonError(
+          "No se ha podido restablecer el PIN.",
+          500
+        );
       }
 
       // Invalidar las sesiones existentes del jugador.
@@ -584,8 +597,6 @@ export async function POST(request) {
         .eq("account_id", accountToReset.id);
 
       if (sessionsError) {
-        // El bloqueo por must_change_pin sigue impidiendo
-        // usar las sesiones antiguas para apuntarse o reservar.
         console.error(
           "Error invalidando sesiones:",
           sessionsError.message
@@ -608,6 +619,7 @@ export async function POST(request) {
     if (action === "register") {
       const name =
         typeof body.name === "string" ? body.name.trim() : "";
+
       const code = body.code;
       const pin = body.pin;
 
@@ -621,7 +633,9 @@ export async function POST(request) {
         typeof code !== "string" ||
         !/^[a-f0-9]{48}$/i.test(code)
       ) {
-        return jsonError("El código de invitación no es válido.");
+        return jsonError(
+          "El código de invitación no es válido."
+        );
       }
 
       if (!validPin(pin)) {
@@ -633,7 +647,10 @@ export async function POST(request) {
       const invite = await findInviteByName(name);
 
       if (!invite) {
-        return jsonError("Nombre o invitación incorrectos.", 401);
+        return jsonError(
+          "Nombre o invitación incorrectos.",
+          401
+        );
       }
 
       if (invite.used_at || invite.account_id) {
@@ -658,13 +675,19 @@ export async function POST(request) {
         submittedHash.length !== expectedHash.length ||
         !timingSafeEqual(submittedHash, expectedHash)
       ) {
-        return jsonError("Nombre o invitación incorrectos.", 401);
+        return jsonError(
+          "Nombre o invitación incorrectos.",
+          401
+        );
       }
 
       const existingAccount = await findAccountByName(name);
 
       if (existingAccount) {
-        return jsonError("Ese nombre ya tiene una cuenta.", 409);
+        return jsonError(
+          "Ese nombre ya tiene una cuenta.",
+          409
+        );
       }
 
       const pinHash = await hashPin(pin);
@@ -731,6 +754,7 @@ export async function POST(request) {
     if (action === "login") {
       const name =
         typeof body.name === "string" ? body.name.trim() : "";
+
       const pin = body.pin;
 
       if (!validName(name) || !validPin(pin)) {
@@ -756,7 +780,10 @@ export async function POST(request) {
       );
 
       if (!account || !account.active) {
-        return jsonError("Nombre o PIN incorrectos.", 401);
+        return jsonError(
+          "Nombre o PIN incorrectos.",
+          401
+        );
       }
 
       // Respetar los bloqueos por intentos fallidos.
@@ -770,10 +797,15 @@ export async function POST(request) {
         );
       }
 
-      const pinMatches = await verifyPin(pin, account.pin_hash);
+      const pinMatches = await verifyPin(
+        pin,
+        account.pin_hash
+      );
 
       if (!pinMatches) {
-        const failedAttempts = (account.failed_attempts || 0) + 1;
+        const failedAttempts =
+          (account.failed_attempts || 0) + 1;
+
         const locked = failedAttempts >= 5;
 
         await supabaseAdmin
@@ -781,7 +813,9 @@ export async function POST(request) {
           .update({
             failed_attempts: locked ? 0 : failedAttempts,
             locked_until: locked
-              ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+              ? new Date(
+                  Date.now() + 15 * 60 * 1000
+                ).toISOString()
               : null,
           })
           .eq("id", account.id);
@@ -841,7 +875,10 @@ export async function POST(request) {
     const account = await getAccountFromRequest(request);
 
     if (!account) {
-      return jsonError("Inicia sesión para continuar.", 401);
+      return jsonError(
+        "Inicia sesión para continuar.",
+        401
+      );
     }
 
     // Un PIN temporal solo permite cambiarlo o cerrar sesión.
@@ -877,7 +914,9 @@ export async function POST(request) {
       }
 
       if (newPin !== confirmPin) {
-        return jsonError("Los dos PIN nuevos no coinciden.");
+        return jsonError(
+          "Los dos PIN nuevos no coinciden."
+        );
       }
 
       if (currentPin === newPin) {
@@ -907,7 +946,10 @@ export async function POST(request) {
       );
 
       if (!matches) {
-        return jsonError("El PIN actual es incorrecto.", 401);
+        return jsonError(
+          "El PIN actual es incorrecto.",
+          401
+        );
       }
 
       const newHash = await hashPin(newPin);
@@ -924,15 +966,23 @@ export async function POST(request) {
         .eq("id", account.id);
 
       if (updateError) {
-        console.error("Error cambiando PIN:", updateError.message);
-        return jsonError("No se ha podido cambiar el PIN.", 500);
+        console.error(
+          "Error cambiando PIN:",
+          updateError.message
+        );
+
+        return jsonError(
+          "No se ha podido cambiar el PIN.",
+          500
+        );
       }
 
       // Revocar todas las sesiones para que vuelva a autenticarse.
-      const { error: deleteSessionsError } = await supabaseAdmin
-        .from("player_sessions")
-        .delete()
-        .eq("account_id", account.id);
+      const { error: deleteSessionsError } =
+        await supabaseAdmin
+          .from("player_sessions")
+          .delete()
+          .eq("account_id", account.id);
 
       if (deleteSessionsError) {
         console.error(
@@ -940,8 +990,6 @@ export async function POST(request) {
           deleteSessionsError.message
         );
 
-        // Se limpia la cookie de este navegador aunque haya fallado
-        // la revocación general. Hay que revisar el error del servidor.
         return clearSessionCookie(
           jsonError(
             "El PIN se ha cambiado, pero no se han podido invalidar todas las sesiones. Revisa el servidor.",
@@ -953,7 +1001,8 @@ export async function POST(request) {
       return clearSessionCookie(
         NextResponse.json({
           ok: true,
-          message: "PIN cambiado correctamente. Inicia sesión de nuevo.",
+          message:
+            "PIN cambiado correctamente. Inicia sesión de nuevo.",
         })
       );
     }
@@ -964,7 +1013,9 @@ export async function POST(request) {
 
     if (action === "join") {
       if (!validDate(body.day)) {
-        return jsonError("La fecha de la partida no es válida.");
+        return jsonError(
+          "La fecha de la partida no es válida."
+        );
       }
 
       const day = new Date(body.day).toISOString();
@@ -983,7 +1034,10 @@ export async function POST(request) {
       }
 
       if ((currentPlayers || []).length >= 4) {
-        return jsonError("La partida está completa.", 409);
+        return jsonError(
+          "La partida está completa.",
+          409
+        );
       }
 
       if (
@@ -1022,30 +1076,58 @@ export async function POST(request) {
 
     // --------------------------------------------------
     // DESAPUNTARSE DE UNA PARTIDA
+    // CORREGIDO: PERMITE DESAPUNTARSE AUNQUE ESTÉ RESERVADA
     // --------------------------------------------------
 
     if (action === "leave") {
+      // Admitir identificadores de inscripción de tipo texto o número.
+      if (
+        (typeof body.id !== "string" &&
+          typeof body.id !== "number") ||
+        String(body.id).trim() === ""
+      ) {
+        return jsonError(
+          "La inscripción no es válida."
+        );
+      }
+
       if (!validDate(body.day)) {
-        return jsonError("La fecha de la partida no es válida.");
+        return jsonError(
+          "La fecha de la partida no es válida."
+        );
       }
 
       const day = new Date(body.day).toISOString();
 
+      // Buscar la inscripción que se quiere eliminar.
       const { data: player, error: playerError } =
         await supabaseAdmin
           .from("players")
-          .select("id, account_id, reserved")
+          .select("id, account_id, day, reserved")
           .eq("id", body.id)
           .eq("day", day)
           .maybeSingle();
 
-      if (playerError || !player) {
+      if (playerError) {
+        console.error(
+          "Error buscando inscripción:",
+          playerError.message
+        );
+
         return jsonError(
-          "No se ha encontrado esa inscripción.",
+          "No se ha podido consultar la inscripción.",
+          500
+        );
+      }
+
+      if (!player) {
+        return jsonError(
+          "No se ha encontrado esa inscripción. Actualiza la página e inténtalo de nuevo.",
           404
         );
       }
 
+      // Comprobar que la inscripción pertenece al jugador autenticado.
       if (player.account_id !== account.id) {
         return jsonError(
           "Solo puedes quitar tu propia inscripción.",
@@ -1053,12 +1135,9 @@ export async function POST(request) {
         );
       }
 
-      if (player.reserved) {
-        return jsonError(
-          "La pista figura como reservada. Contacta con el grupo antes de borrarte.",
-          409
-        );
-      }
+      // No se bloquea el borrado si reserved es true.
+      // El jugador puede desapuntarse si es el cuarto,
+      // si la partida está completa o si la pista está reservada.
 
       const { data: deleted, error: deleteError } =
         await supabaseAdmin
@@ -1069,14 +1148,29 @@ export async function POST(request) {
           .select("id")
           .maybeSingle();
 
-      if (deleteError || !deleted) {
+      if (deleteError) {
+        console.error(
+          "Error eliminando inscripción:",
+          deleteError.message
+        );
+
         return jsonError(
           "No se ha podido eliminar la inscripción.",
           500
         );
       }
 
-      return NextResponse.json({ ok: true });
+      if (!deleted) {
+        return jsonError(
+          "La inscripción ya no existe o no se ha podido eliminar. Actualiza la página.",
+          409
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: "Te has desapuntado correctamente.",
+      });
     }
 
     // --------------------------------------------------
@@ -1085,7 +1179,9 @@ export async function POST(request) {
 
     if (action === "reserve") {
       if (!validDate(body.day)) {
-        return jsonError("La fecha de la partida no es válida.");
+        return jsonError(
+          "La fecha de la partida no es válida."
+        );
       }
 
       const day = new Date(body.day).toISOString();
@@ -1122,7 +1218,10 @@ export async function POST(request) {
       }
 
       if (responsible.reserved) {
-        return jsonError("La reserva ya está marcada.", 409);
+        return jsonError(
+          "La reserva ya está marcada.",
+          409
+        );
       }
 
       const { data: updated, error: updateError } =
@@ -1145,10 +1244,17 @@ export async function POST(request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Acción no reconocida.
+    // --------------------------------------------------
+    // ACCIÓN NO RECONOCIDA
+    // --------------------------------------------------
+
     return jsonError("Acción no reconocida.");
   } catch (error) {
     console.error("Error en API de pádel:", error);
-    return jsonError("Error interno del servidor.", 500);
+    return jsonError(
+      "Error interno del servidor.",
+      500
+    );
   }
 }
+```
