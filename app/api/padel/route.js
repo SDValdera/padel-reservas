@@ -1,4 +1,4 @@
-```javascript
+
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 import {
@@ -192,16 +192,16 @@ function setAdminCookie(response) {
   const signature = signAdminExpiry(expiry);
 
   response.cookies.set(
-    ADMIN_COOKIE_NAME,
-    `${expiry}.${signature}`,
-    {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-      maxAge: ADMIN_SESSION_SECONDS,
-    }
-  );
+  ADMIN_COOKIE_NAME,
+  expiry + "." + signature,
+  {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: ADMIN_SESSION_MAX_AGE,
+  }
+);
 
   return response;
 }
@@ -1257,4 +1257,3 @@ export async function POST(request) {
     );
   }
 }
-```
