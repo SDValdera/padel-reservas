@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -12,16 +11,10 @@ function generateSlots() {
   const nextWeek = [];
 
   const dayNames = [
-    "Domingo",
-    "Lunes",
-    "Martes",
-    "Miércoles",
-    "Jueves",
-    "Viernes",
-    "Sábado",
+    "Domingo", "Lunes", "Martes", "Miércoles",
+    "Jueves", "Viernes", "Sábado",
   ];
 
-  // Horarios de las partidas según el día de la semana.
   const schedules = {
     0: ["09:30", "11:00"],
     1: ["18:30", "20:00"],
@@ -48,7 +41,6 @@ function generateSlots() {
     for (const hour of schedules[dayOfWeek]) {
       const [hours, minutes] = hour.split(":").map(Number);
 
-      // Convertimos el horario local a ISO para Supabase.
       const slotDate = new Date(
         date.getFullYear(),
         date.getMonth(),
@@ -61,10 +53,9 @@ function generateSlots() {
 
       const slot = {
         id: slotDate.toISOString(),
-        label: dayNames[dayOfWeek] + " " + formattedDate + " - " + hour,
+        label: `${dayNames[dayOfWeek]} ${formattedDate} - ${hour}`,
       };
 
-      // Los primeros siete días aparecen en la primera columna.
       if (i < 7) {
         thisWeek.push(slot);
       } else {
@@ -76,10 +67,8 @@ function generateSlots() {
   return { thisWeek, nextWeek };
 }
 
-// Comparar fechas ISO sin depender de su formato de representación.
 function sameDay(first, second) {
   if (!first || !second) return false;
-
   return new Date(first).getTime() === new Date(second).getTime();
 }
 
@@ -88,18 +77,15 @@ function sameDay(first, second) {
 // ============================================================
 
 export default function Home() {
-  // Campos de inicio de sesión y registro.
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [authMode, setAuthMode] = useState("login");
 
-  // Estado del formulario para cambiar el PIN.
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
 
-  // Datos de la cuenta y de las partidas.
   const [account, setAccount] = useState(null);
   const [players, setPlayers] = useState([]);
   const [slots, setSlots] = useState({
@@ -107,7 +93,6 @@ export default function Home() {
     nextWeek: [],
   });
 
-  // Estado general de carga y mensajes.
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -124,8 +109,6 @@ export default function Home() {
       credentials: "same-origin",
     };
 
-    // Si hay acción, enviamos una petición POST.
-    // Si no hay acción, consultamos mediante GET.
     if (action) {
       options.method = "POST";
       options.headers = {
@@ -169,8 +152,6 @@ export default function Home() {
   const loadPlayers = useCallback(async () => {
     try {
       const result = await apiRequest(null);
-
-      // La API también devuelve must_change_pin.
       setPlayers(result.players || []);
       setAccount(result.account || null);
     } catch (error) {
@@ -230,8 +211,6 @@ export default function Home() {
 
       setPin("");
       setInviteCode("");
-
-      // El GET posterior obtiene también si debe cambiar el PIN.
       await loadPlayers();
     } catch (error) {
       setNotice(error.message);
@@ -241,7 +220,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 6. CERRAR SESIÓN DE JUGADOR
+  // 6. CERRAR SESIÓN
   // ==========================================================
 
   async function logout() {
@@ -268,7 +247,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 7. CAMBIAR EL PIN DEL JUGADOR
+  // 7. CAMBIAR EL PIN
   // ==========================================================
 
   async function changePlayerPin(event) {
@@ -276,19 +255,16 @@ export default function Home() {
 
     if (busy) return;
 
-    // Validar el PIN actual.
     if (!/^\d{8,12}$/.test(currentPin)) {
       setNotice("Introduce tu PIN actual.");
       return;
     }
 
-    // Validar el nuevo PIN.
     if (!/^\d{8,12}$/.test(newPin)) {
       setNotice("El nuevo PIN debe tener entre 8 y 12 dígitos.");
       return;
     }
 
-    // Confirmar que ambos PIN nuevos coinciden.
     if (newPin !== confirmPin) {
       setNotice("Los dos PIN nuevos no coinciden.");
       return;
@@ -303,14 +279,12 @@ export default function Home() {
     setNotice("");
 
     try {
-      // El servidor verifica el PIN actual y guarda el nuevo hash.
       await apiRequest("change-pin", {
         currentPin,
         newPin,
         confirmPin,
       });
 
-      // La API invalida las sesiones y elimina la cookie actual.
       setAccount(null);
       setName("");
       setPin("");
@@ -341,7 +315,6 @@ export default function Home() {
       return;
     }
 
-    // No permitir operaciones mientras haya un PIN temporal.
     if (account.must_change_pin) {
       setNotice("Debes cambiar tu PIN temporal antes de continuar.");
       return;
@@ -363,7 +336,6 @@ export default function Home() {
 
     try {
       await apiRequest("join", { day });
-
       await loadPlayers();
       setNotice("Te has apuntado a la partida.");
     } catch (error) {
@@ -375,11 +347,9 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 9. COMPROBAR SI EL JUGADOR ES EL PROPIETARIO
+  // 9. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
   // ==========================================================
 
-  // Esta comprobación controla los botones visibles.
-  // Los permisos reales también deben verificarse en el servidor.
   function canLeave(player) {
     return Boolean(
       account &&
@@ -391,7 +361,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 10. DESAPUNTARSE DE UNA PARTIDA
+  // 10. DESAPUNTARSE
   // ==========================================================
 
   async function leave(id) {
@@ -440,35 +410,22 @@ export default function Home() {
   // ==========================================================
 
   function openResasports() {
-    // Web de reservas para ordenador y alternativa para iPhone.
     const bookingUrl = "https://centro.resasports.com/login";
-
-    // Identificador Android que estamos probando.
     const packageName = "com.Nubapp.LesJoueurs";
 
-    // Enlace a Google Play por si Android no abre la aplicación.
     const playStoreUrl =
       "https://play.google.com/store/apps/details?id=" +
       packageName;
 
-    // Detectar el dispositivo.
     const userAgent = navigator.userAgent || "";
-
     const isAndroid = /Android/i.test(userAgent);
-
     const isIPhone = /iPhone|iPod/i.test(userAgent);
 
-    // Algunos iPad se identifican como ordenadores Mac.
     const isIPad =
       /iPad/i.test(userAgent) ||
       (navigator.platform === "MacIntel" &&
         navigator.maxTouchPoints > 1);
 
-    // --------------------------------------------------------
-    // ANDROID
-    // Intentar abrir ResaSports mediante un Android Intent.
-    // Si no se puede abrir, Android/Chrome puede usar Google Play.
-    // --------------------------------------------------------
     if (isAndroid) {
       const intentUrl =
         "intent://#Intent;" +
@@ -482,21 +439,10 @@ export default function Home() {
       return;
     }
 
-    // --------------------------------------------------------
-    // IPHONE / IPAD
-    // Intentar abrir la aplicación instalada.
-    // Si el navegador continúa activo, abrir la web de reservas.
-    //
-    // NOTA: "resasports://" es un esquema provisional.
-    // Para garantizar la apertura de la app necesitamos confirmar
-    // que ResaSports admite oficialmente ese esquema.
-    // --------------------------------------------------------
     if (isIPhone || isIPad) {
       let appOpened = false;
       let fallbackTimer;
 
-      // Si Safari pasa a segundo plano, normalmente significa
-      // que se ha cambiado a otra aplicación.
       const handleVisibilityChange = () => {
         if (document.hidden) {
           appOpened = true;
@@ -514,10 +460,8 @@ export default function Home() {
         handleVisibilityChange
       );
 
-      // Intentar abrir ResaSports.
       window.location.href = "resasports://";
 
-      // Si la aplicación no se abre, recurrir a la web.
       fallbackTimer = window.setTimeout(() => {
         document.removeEventListener(
           "visibilitychange",
@@ -532,10 +476,6 @@ export default function Home() {
       return;
     }
 
-    // --------------------------------------------------------
-    // ORDENADOR
-    // Abrir la web de reservas en una nueva pestaña.
-    // --------------------------------------------------------
     window.open(
       bookingUrl,
       "_blank",
@@ -544,7 +484,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 12. MARCAR LA RESERVA EN LA WEB
+  // 12. MARCAR RESERVA
   // ==========================================================
 
   async function markReserved(id) {
@@ -569,7 +509,6 @@ export default function Home() {
       return;
     }
 
-    // Ordenar las inscripciones para identificar al cuarto jugador.
     const playersForDay = players
       .filter((player) => sameDay(player.day, responsible.day))
       .sort(
@@ -595,7 +534,6 @@ export default function Home() {
     setNotice("");
 
     try {
-      // Marcar primero la reserva en nuestra aplicación.
       await apiRequest("reserve", {
         id,
         day: responsible.day,
@@ -607,8 +545,7 @@ export default function Home() {
         "Marcada en la web. Comprueba y completa la reserva en ResaSports."
       );
 
-      // Abrir ResaSports según el dispositivo.
-      // Esto no confirma una reserva dentro de ResaSports.
+      // Esto abre ResaSports, pero no confirma la reserva dentro de esa app.
       openResasports();
     } catch (error) {
       setNotice(error.message);
@@ -623,15 +560,40 @@ export default function Home() {
   // ==========================================================
 
   useEffect(() => {
-    // Generar los horarios en el navegador.
     setSlots(generateSlots());
-
-    // Cargar jugadores y sesión.
     loadPlayers();
   }, [loadPlayers]);
 
   // ==========================================================
-  // 14. MOSTRAR UNA PARTIDA
+  // 14. ESTILOS COMUNES
+  // ==========================================================
+
+  const buttonStyle = {
+    padding: "11px 16px",
+    minHeight: "42px",
+    borderRadius: "9px",
+    border: "none",
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: "14px",
+    cursor: busy ? "not-allowed" : "pointer",
+    transition: "opacity 0.2s ease",
+  };
+
+  const inputStyle = {
+    display: "block",
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "12px",
+    margin: "6px 0 15px",
+    border: "1px solid #CBD5E1",
+    borderRadius: "9px",
+    fontSize: "16px",
+    backgroundColor: "#FFFFFF",
+  };
+
+  // ==========================================================
+  // 15. MOSTRAR UNA PARTIDA
   // ==========================================================
 
   function renderSlot(slot) {
@@ -643,7 +605,6 @@ export default function Home() {
           new Date(b.created_at).getTime()
       );
 
-    // El cuarto jugador es el responsable de reservar.
     const responsible =
       playersForDay.length === 4 ? playersForDay[3] : null;
 
@@ -656,124 +617,189 @@ export default function Home() {
       account?.must_change_pin === true;
 
     return (
-      <div
+      <article
         key={slot.id}
-        className="slot-card"
         style={{
-          border: "1px solid #E5E7EB",
-          borderRadius: "12px",
-          padding: "15px",
-          marginBottom: "15px",
+          border: isFull
+            ? "1px solid #FECACA"
+            : "1px solid #D1FAE5",
+          borderRadius: "16px",
+          padding: "18px",
+          marginBottom: "16px",
           backgroundColor: "#FFFFFF",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+          boxShadow: "0 4px 12px rgba(15,23,42,0.07)",
           overflowWrap: "anywhere",
           boxSizing: "border-box",
         }}
       >
-        <h3>{slot.label}</h3>
-
-        <p>
-          <strong>{playersForDay.length}/4 jugadores</strong>
-        </p>
-
-        {/* Botón para apuntarse a la partida. */}
-        <button
-          onClick={() => join(slot.id)}
-          disabled={
-            isFull || busy || !account || pinChangeRequired
-          }
-          title={
-            !account
-              ? "Inicia sesión para apuntarte"
-              : pinChangeRequired
-                ? "Primero debes cambiar el PIN"
-                : ""
-          }
+        <h3
           style={{
-            padding: "10px 16px",
-            minHeight: "42px",
-            borderRadius: "8px",
-            border: "none",
-            backgroundColor: isFull ? "#9CA3AF" : "#16A34A",
-            color: "#FFFFFF",
-            fontWeight: "bold",
-            cursor:
-              isFull || busy || !account || pinChangeRequired
-                ? "not-allowed"
-                : "pointer",
-            opacity:
-              busy || !account || pinChangeRequired ? 0.7 : 1,
+            margin: "0 0 14px",
+            paddingBottom: "12px",
+            borderBottom: "1px solid #E5E7EB",
+            color: "#111827",
+            fontSize: "18px",
+            lineHeight: 1.4,
           }}
         >
-          {isFull
-            ? "Partida completa"
-            : !account
-              ? "Inicia sesión para apuntarte"
-              : pinChangeRequired
-                ? "Cambia primero tu PIN"
-                : "Me apunto"}
-        </button>
+          🎾 {slot.label}
+        </h3>
 
-        {/* Lista de jugadores apuntados. */}
-        <div style={{ marginTop: "12px" }}>
-          {playersForDay.map((player, index) => (
-            <div
-              key={player.id}
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginTop: "8px",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-              }}
-            >
-              <span>
-                {player.name}
-                {index === 3 ? " 👑" : ""}
-              </span>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "7px 11px",
+            marginBottom: "14px",
+            borderRadius: "999px",
+            backgroundColor: isFull ? "#FEE2E2" : "#DCFCE7",
+            color: isFull ? "#991B1B" : "#166534",
+            fontSize: "13px",
+            fontWeight: 700,
+          }}
+        >
+          {isFull ? "🔒" : "👥"}
+          {playersForDay.length}/4 jugadores
+          {!isFull &&
+            ` · ${4 - playersForDay.length} ${
+              4 - playersForDay.length === 1
+                ? "plaza libre"
+                : "plazas libres"
+            }`}
+        </div>
 
-              {/* Solo el propietario puede desapuntarse. */}
-              {canLeave(player) && (
-                <button
-                  onClick={() => leave(player.id)}
-                  disabled={
-                    busy ||
-                    player.reserved === true ||
-                    pinChangeRequired
-                  }
+        <div>
+          <button
+            onClick={() => join(slot.id)}
+            disabled={
+              isFull || busy || !account || pinChangeRequired
+            }
+            title={
+              !account
+                ? "Inicia sesión para apuntarte"
+                : pinChangeRequired
+                  ? "Primero debes cambiar el PIN"
+                  : ""
+            }
+            style={{
+              ...buttonStyle,
+              backgroundColor: isFull ? "#9CA3AF" : "#16A34A",
+              opacity:
+                busy || !account || pinChangeRequired ? 0.7 : 1,
+            }}
+          >
+            {isFull
+              ? "Partida completa"
+              : !account
+                ? "Inicia sesión para apuntarte"
+                : pinChangeRequired
+                  ? "Cambia primero tu PIN"
+                  : "＋ Me apunto"}
+          </button>
+        </div>
+
+        {/* Lista de jugadores con nombres en negrita. */}
+        <div
+          style={{
+            marginTop: "16px",
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          {playersForDay.map((player, index) => {
+            const isResponsiblePlayer = index === 3;
+
+            return (
+              <div
+                key={player.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                  padding: "11px",
+                  borderRadius: "10px",
+                  backgroundColor: isResponsiblePlayer
+                    ? "#FEF3C7"
+                    : "#F9FAFB",
+                  border: isResponsiblePlayer
+                    ? "1px solid #F59E0B"
+                    : "1px solid #E5E7EB",
+                  boxSizing: "border-box",
+                }}
+              >
+                <span
                   style={{
-                    padding: "8px 12px",
-                    minHeight: "40px",
-                    borderRadius: "8px",
-                    border: "none",
-                    backgroundColor: "#DC2626",
-                    color: "#FFFFFF",
-                    fontWeight: "bold",
-                    cursor:
-                      busy || pinChangeRequired
-                        ? "not-allowed"
-                        : "pointer",
+                    fontWeight: 800,
+                    fontSize: "16px",
+                    color: isResponsiblePlayer
+                      ? "#92400E"
+                      : "#111827",
                   }}
                 >
-                  Desapuntar
-                </button>
-              )}
+                  {player.name}
+                  {isResponsiblePlayer ? " 👑 Responsable" : ""}
+                </span>
+
+                {canLeave(player) && (
+                  <button
+                    onClick={() => leave(player.id)}
+                    disabled={
+                      busy ||
+                      player.reserved === true ||
+                      pinChangeRequired
+                    }
+                    style={{
+                      ...buttonStyle,
+                      padding: "9px 12px",
+                      backgroundColor: "#DC2626",
+                      opacity:
+                        busy || pinChangeRequired ? 0.7 : 1,
+                    }}
+                  >
+                    Desapuntar
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Mostrar las plazas vacías. */}
+          {Array.from({
+            length: Math.max(0, 4 - playersForDay.length),
+          }).map((_, index) => (
+            <div
+              key={`empty-${slot.id}-${index}`}
+              style={{
+                padding: "10px 12px",
+                borderRadius: "9px",
+                border: "1px dashed #CBD5E1",
+                color: "#94A3B8",
+                fontSize: "14px",
+                backgroundColor: "#FFFFFF",
+              }}
+            >
+              ＋ Plaza disponible
             </div>
           ))}
         </div>
 
-        {/* Información y controles del responsable. */}
+        {/* Controles del responsable de la reserva. */}
         {responsible && (
           <div
             style={{
-              marginTop: "15px",
-              padding: "12px",
-              backgroundColor: "#FFF8DC",
-              borderRadius: "8px",
+              marginTop: "16px",
+              padding: "14px",
+              backgroundColor: reserved ? "#F0FDF4" : "#FFFBEB",
+              border: reserved
+                ? "1px solid #BBF7D0"
+                : "1px solid #FDE68A",
+              borderRadius: "11px",
             }}
           >
-            <strong>
+            <strong style={{ color: "#92400E" }}>
               👑 Responsable: {responsible.name}
             </strong>
 
@@ -783,20 +809,13 @@ export default function Home() {
                   onClick={() => markReserved(responsible.id)}
                   disabled={busy || pinChangeRequired}
                   style={{
-                    padding: "10px 16px",
-                    minHeight: "42px",
-                    borderRadius: "8px",
-                    border: "none",
-                    backgroundColor: "#6B7280",
-                    color: "#FFFFFF",
-                    fontWeight: "bold",
-                    cursor:
-                      busy || pinChangeRequired
-                        ? "not-allowed"
-                        : "pointer",
+                    ...buttonStyle,
+                    backgroundColor: "#64748B",
+                    opacity:
+                      busy || pinChangeRequired ? 0.7 : 1,
                   }}
                 >
-                  Reservar pista
+                  📍 Reservar pista
                 </button>
               </div>
             )}
@@ -814,18 +833,18 @@ export default function Home() {
             )}
 
             {!reserved && !isResponsible && (
-              <p style={{ marginBottom: 0 }}>
+              <p style={{ marginBottom: 0, fontSize: "14px" }}>
                 ⏳ Pendiente de reserva por el responsable.
               </p>
             )}
           </div>
         )}
-      </div>
+      </article>
     );
   }
 
   // ==========================================================
-  // 15. INTERFAZ PRINCIPAL
+  // 16. INTERFAZ PRINCIPAL
   // ==========================================================
 
   return (
@@ -836,24 +855,96 @@ export default function Home() {
         boxSizing: "border-box",
         margin: "0 auto",
         padding: "20px",
-        fontFamily: "Arial, sans-serif",
+        fontFamily:
+          "Arial, Helvetica, sans-serif",
         color: "#1F2937",
+        backgroundColor: "#F8FAFC",
+        minHeight: "100vh",
       }}
     >
+      <style jsx>{`
+        .weeks-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 24px;
+          align-items: start;
+        }
 
-      <h1 style={{ marginBottom: "20px" }}>
-        🎾 Reserva Pádel
-      </h1>
+        .week-column {
+          min-width: 0;
+        }
 
-      {/* Mensajes de estado, errores y confirmaciones. */}
+        .week-heading {
+          padding: 15px 17px;
+          margin: 0 0 16px;
+          border-radius: 12px;
+          background: #0F172A;
+          color: #FFFFFF;
+          font-size: 20px;
+        }
+
+        @media (max-width: 760px) {
+          .weeks-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 14px;
+          }
+
+          .week-heading {
+            font-size: 18px;
+          }
+        }
+      `}</style>
+
+      <header
+        style={{
+          padding: "24px",
+          marginBottom: "24px",
+          borderRadius: "18px",
+          background:
+            "linear-gradient(135deg, #064E3B 0%, #15803D 65%, #22C55E 100%)",
+          color: "#FFFFFF",
+          boxShadow: "0 8px 22px rgba(6,78,59,0.18)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "13px",
+            textTransform: "uppercase",
+            textAlign: "center",
+            letterSpacing: "2px",
+            opacity: 0.9,
+            fontWeight: "bold",
+          }}
+        >
+          Juega al Padel en Quintanar
+        </div>
+
+        <h1
+          style={{
+            fontSize: "clamp(27px, 5vw, 38px)",
+            margin: "8px 0",
+            textAlign: "center",
+          }}
+        >
+          🎾 Reserva de Pádel
+        </h1>
+
+        <p style={{ margin: 0, opacity: 0.95, textAlign: "center"}}>
+          Organiza tus partidas y encuentra tu próximo partido.
+        </p>
+      </header>
+
+      {/* Mensajes de estado y errores. */}
       {notice && (
         <div
           role="status"
           style={{
-            marginBottom: "16px",
-            padding: "12px",
-            borderRadius: "8px",
-            backgroundColor: "#F3F4F6",
+            marginBottom: "18px",
+            padding: "14px 16px",
+            borderRadius: "10px",
+            backgroundColor: "#EFF6FF",
+            border: "1px solid #BFDBFE",
+            color: "#1E40AF",
             overflowWrap: "anywhere",
           }}
         >
@@ -861,27 +952,26 @@ export default function Home() {
         </div>
       )}
 
-      {/* ====================================================
-          FORMULARIO DE REGISTRO E INICIO DE SESIÓN
-          ==================================================== */}
-
+      {/* Registro e inicio de sesión. */}
       {!account ? (
         <section
           style={{
-            maxWidth: "420px",
+            maxWidth: "440px",
             marginBottom: "28px",
-            padding: "18px",
-            border: "1px solid #E5E7EB",
-            borderRadius: "12px",
+            padding: "22px",
+            border: "1px solid #E2E8F0",
+            borderRadius: "16px",
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
           }}
         >
           <h2 style={{ marginTop: 0 }}>
             {authMode === "login"
-              ? "Iniciar sesión"
-              : "Crear cuenta"}
+              ? "🔐 Iniciar sesión"
+              : "📝 Crear cuenta"}
           </h2>
 
-          <p>
+          <p style={{ color: "#64748B", lineHeight: 1.5 }}>
             {authMode === "login"
               ? "Entra con tu nombre y tu PIN personal."
               : "Necesitas un código de invitación para registrar tu nombre."}
@@ -903,15 +993,7 @@ export default function Home() {
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
-              style={{
-                padding: "12px",
-                width: "100%",
-                boxSizing: "border-box",
-                marginBottom: "14px",
-                border: "1px solid #D1D5DB",
-                borderRadius: "8px",
-                fontSize: "16px",
-              }}
+              style={inputStyle}
             />
 
             {authMode === "register" && (
@@ -932,15 +1014,7 @@ export default function Home() {
                   onChange={(event) =>
                     setInviteCode(event.target.value)
                   }
-                  style={{
-                    padding: "12px",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    marginBottom: "14px",
-                    border: "1px solid #D1D5DB",
-                    borderRadius: "8px",
-                    fontSize: "16px",
-                  }}
+                  style={inputStyle}
                 />
               </>
             )}
@@ -971,28 +1045,17 @@ export default function Home() {
                   event.target.value.replace(/\D/g, "").slice(0, 12)
                 )
               }
-              style={{
-                padding: "12px",
-                width: "100%",
-                boxSizing: "border-box",
-                marginBottom: "16px",
-                border: "1px solid #D1D5DB",
-                borderRadius: "8px",
-                fontSize: "16px",
-              }}
+              style={inputStyle}
             />
 
             <button
               type="submit"
               disabled={busy}
               style={{
-                padding: "11px 16px",
-                borderRadius: "8px",
-                border: "none",
+                ...buttonStyle,
                 backgroundColor: "#2563EB",
-                color: "#FFFFFF",
-                fontWeight: "bold",
-                cursor: busy ? "not-allowed" : "pointer",
+                width: "100%",
+                opacity: busy ? 0.7 : 1,
               }}
             >
               {busy
@@ -1003,7 +1066,6 @@ export default function Home() {
             </button>
           </form>
 
-          {/* Alternar entre entrar y crear una cuenta. */}
           <button
             type="button"
             disabled={busy}
@@ -1032,7 +1094,6 @@ export default function Home() {
           </button>
         </section>
       ) : (
-        // Información de la sesión del jugador autenticado.
         <section
           style={{
             display: "flex",
@@ -1041,23 +1102,20 @@ export default function Home() {
             justifyContent: "space-between",
             flexWrap: "wrap",
             marginBottom: "24px",
-            padding: "14px",
+            padding: "16px",
             backgroundColor: "#F0FDF4",
-            borderRadius: "10px",
+            border: "1px solid #BBF7D0",
+            borderRadius: "12px",
           }}
         >
-          <strong>Sesión iniciada: {account.name}</strong>
+          <strong>👋 Sesión iniciada: {account.name}</strong>
 
           <button
             onClick={logout}
             disabled={busy}
             style={{
-              padding: "9px 14px",
-              border: "none",
-              borderRadius: "8px",
+              ...buttonStyle,
               backgroundColor: "#374151",
-              color: "#FFFFFF",
-              cursor: busy ? "not-allowed" : "pointer",
             }}
           >
             Cerrar sesión
@@ -1065,18 +1123,15 @@ export default function Home() {
         </section>
       )}
 
-      {/* ====================================================
-          FORMULARIO PARA CAMBIAR EL PIN
-          ==================================================== */}
-
+      {/* Cambiar el PIN. */}
       {account && (
         <section
           style={{
             maxWidth: "480px",
             marginBottom: "28px",
-            padding: "18px",
-            border: "1px solid #E5E7EB",
-            borderRadius: "12px",
+            padding: "20px",
+            border: "1px solid #E2E8F0",
+            borderRadius: "14px",
             backgroundColor: account.must_change_pin
               ? "#FFFBEB"
               : "#FFFFFF",
@@ -1119,16 +1174,7 @@ export default function Home() {
                   event.target.value.replace(/\D/g, "").slice(0, 12)
                 )
               }
-              style={{
-                display: "block",
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                margin: "6px 0 14px",
-                border: "1px solid #D1D5DB",
-                borderRadius: "8px",
-                fontSize: "16px",
-              }}
+              style={inputStyle}
             />
 
             <label
@@ -1153,16 +1199,7 @@ export default function Home() {
                   event.target.value.replace(/\D/g, "").slice(0, 12)
                 )
               }
-              style={{
-                display: "block",
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                margin: "6px 0 14px",
-                border: "1px solid #D1D5DB",
-                borderRadius: "8px",
-                fontSize: "16px",
-              }}
+              style={inputStyle}
             />
 
             <label
@@ -1187,29 +1224,15 @@ export default function Home() {
                   event.target.value.replace(/\D/g, "").slice(0, 12)
                 )
               }
-              style={{
-                display: "block",
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                margin: "6px 0 14px",
-                border: "1px solid #D1D5DB",
-                borderRadius: "8px",
-                fontSize: "16px",
-              }}
+              style={inputStyle}
             />
 
             <button
               type="submit"
               disabled={busy}
               style={{
-                padding: "11px 16px",
-                border: "none",
-                borderRadius: "8px",
+                ...buttonStyle,
                 backgroundColor: "#2563EB",
-                color: "#FFFFFF",
-                fontWeight: "bold",
-                cursor: busy ? "not-allowed" : "pointer",
                 opacity: busy ? 0.7 : 1,
               }}
             >
@@ -1223,21 +1246,20 @@ export default function Home() {
         </section>
       )}
 
-      {loading && <p>Cargando partidas...</p>}
+      {loading && (
+        <p style={{ color: "#64748B" }}>Cargando partidas...</p>
+      )}
 
-      {/* ====================================================
-          LAS DOS SEMANAS DE PARTIDAS
-          ==================================================== */}
-
+      {/* Las dos semanas de partidas. */}
       {!account?.must_change_pin && (
         <div className="weeks-grid">
           <section className="week-column">
-            <h2>📅 Esta semana</h2>
+            <h2 className="week-heading">📅 Esta semana</h2>
             {thisWeek.map(renderSlot)}
           </section>
 
           <section className="week-column">
-            <h2>📅 Próxima semana</h2>
+            <h2 className="week-heading">📅 Próxima semana</h2>
             {nextWeek.map(renderSlot)}
           </section>
         </div>
