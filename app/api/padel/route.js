@@ -18,6 +18,7 @@ const COOKIE_NAME = "padel_session";
 const SESSION_DAYS = 30;
 const ADMIN_COOKIE_NAME = "padel_admin_session";
 const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
+const ADMIN_SESSION_MAX_AGE = 8 * 60 * 60;
 
 // ======================================================
 // FUNCIONES GENERALES
