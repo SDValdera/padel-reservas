@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -90,6 +89,7 @@ export default function Home() {
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [newName, setNewName] = useState("");
 
   const [account, setAccount] = useState(null);
   const [players, setPlayers] = useState([]);
@@ -245,6 +245,7 @@ export default function Home() {
       setCurrentPin("");
       setNewPin("");
       setConfirmPin("");
+      setNewName("");
 
       setNotice("Sesión cerrada.");
     } catch (error) {
@@ -255,9 +256,74 @@ export default function Home() {
     }
   }
 
-  // ==========================================================
-  // 7. CAMBIAR EL PIN
-  // ==========================================================
+  // ============================================================
+  // 7. CAMBIAR EL NOMBRE DE USUARIO
+  // ============================================================
+
+  async function changePlayerName(event) {
+    event.preventDefault();
+
+    if (busy) return;
+
+    const cleanName = newName.trim();
+
+    if (cleanName.length < 2 || cleanName.length > 60) {
+      setNotice("El nombre debe tener entre 2 y 60 caracteres.");
+      return;
+    }
+
+    if (!account) {
+      setNotice("Inicia sesión para cambiar tu nombre.");
+      return;
+    }
+
+    if (account.must_change_pin) {
+      setNotice(
+        "Debes cambiar tu PIN temporal antes de modificar tu nombre."
+      );
+      return;
+    }
+
+    if (
+      cleanName.toLocaleLowerCase("es") ===
+      account.name.trim().toLocaleLowerCase("es")
+    ) {
+      setNotice("El nuevo nombre es igual al actual.");
+      return;
+    }
+
+    setBusy(true);
+    setNotice("");
+
+    try {
+      const result = await apiRequest("change-name", {
+        name: cleanName,
+      });
+
+      const updatedName = result.name || cleanName;
+
+      setAccount((current) =>
+        current
+          ? { ...current, name: updatedName }
+          : current
+      );
+
+      setName(updatedName);
+      setNewName(updatedName);
+
+      await loadPlayers();
+
+      setNotice("Nombre de usuario actualizado correctamente.");
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ============================================================
+  // 8. CAMBIAR EL PIN
+  // ============================================================
 
   async function changePlayerPin(event) {
     event.preventDefault();
@@ -301,6 +367,7 @@ export default function Home() {
       setCurrentPin("");
       setNewPin("");
       setConfirmPin("");
+      setNewName("");
       setAuthMode("login");
 
       setNotice(
@@ -315,7 +382,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 8. APUNTARSE A UNA PARTIDA
+  // 9. APUNTARSE A UNA PARTIDA
   // ==========================================================
 
   async function join(day) {
@@ -360,7 +427,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 9. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
+  // 10. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
   // ==========================================================
 
   function canLeave(player) {
@@ -374,7 +441,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 10. DESAPUNTARSE
+  // 11. DESAPUNTARSE
   // ==========================================================
 
   async function leave(id) {
@@ -392,7 +459,6 @@ export default function Home() {
 
     if (busy) return;
 
-    // Localizar la inscripción seleccionada.
     const player = players.find(
       (item) => String(item.id) === String(id)
     );
@@ -402,7 +468,6 @@ export default function Home() {
       return;
     }
 
-    // Validar que la inscripción pertenece al usuario.
     if (!canLeave(player)) {
       setNotice(
         "Solo puedes desapuntar tu propia inscripción."
@@ -410,8 +475,6 @@ export default function Home() {
       return;
     }
 
-    // No bloquear la operación por estar la pista completa
-    // ni por el estado reservado de la inscripción.
     setBusy(true);
     setNotice("");
 
@@ -441,7 +504,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 11. ABRIR RESASPORTS SEGÚN EL DISPOSITIVO
+  // 12. ABRIR RESASPORTS SEGÚN EL DISPOSITIVO
   // ==========================================================
 
   function openResasports() {
@@ -521,7 +584,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 12. MARCAR RESERVA
+  // 13. MARCAR RESERVA
   // ==========================================================
 
   async function markReserved(id) {
@@ -584,7 +647,6 @@ export default function Home() {
         "Marcada en la web. Comprueba y completa la reserva en ResaSports."
       );
 
-      // Abre ResaSports, pero no confirma la reserva en esa app.
       openResasports();
     } catch (error) {
       setNotice(error.message);
@@ -595,7 +657,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 13. CARGA INICIAL
+  // 14. CARGA INICIAL
   // ==========================================================
 
   useEffect(() => {
@@ -603,8 +665,14 @@ export default function Home() {
     loadPlayers();
   }, [loadPlayers]);
 
+  useEffect(() => {
+    if (account?.name) {
+      setNewName(account.name);
+    }
+  }, [account?.name]);
+
   // ==========================================================
-  // 14. ESTILOS COMUNES
+  // 15. ESTILOS COMUNES
   // ==========================================================
 
   const buttonStyle = {
@@ -632,7 +700,7 @@ export default function Home() {
   };
 
   // ==========================================================
-  // 15. MOSTRAR UNA PARTIDA
+  // 16. MOSTRAR UNA PARTIDA
   // ==========================================================
 
   function renderSlot(slot) {
@@ -893,7 +961,7 @@ export default function Home() {
   }
 
   // ==========================================================
-  // 16. INTERFAZ PRINCIPAL
+  // 17. INTERFAZ PRINCIPAL
   // ==========================================================
 
   return (
@@ -1175,6 +1243,62 @@ export default function Home() {
           >
             Cerrar sesión
           </button>
+        </section>
+      )}
+
+      {/* Cambiar el nombre de usuario. */}
+      {account && !account.must_change_pin && (
+        <section
+          style={{
+            maxWidth: "480px",
+            marginBottom: "18px",
+            padding: "20px",
+            border: "1px solid #E2E8F0",
+            borderRadius: "14px",
+            backgroundColor: "#FFFFFF",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>
+            👤 Cambiar mi nombre de usuario
+          </h2>
+
+          <p style={{ color: "#64748B", lineHeight: 1.5 }}>
+            Este nombre se utilizará para iniciar sesión y aparecerá
+            actualizado en todas tus partidas.
+          </p>
+
+          <form onSubmit={changePlayerName}>
+            <label
+              htmlFor="new-player-name"
+              style={{ display: "block", marginBottom: "6px" }}
+            >
+              Nuevo nombre de usuario
+            </label>
+
+            <input
+              id="new-player-name"
+              type="text"
+              autoComplete="username"
+              minLength={2}
+              maxLength={60}
+              required
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              style={inputStyle}
+            />
+
+            <button
+              type="submit"
+              disabled={busy}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#0F766E",
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              {busy ? "Guardando..." : "Guardar nombre"}
+            </button>
+          </form>
         </section>
       )}
 
