@@ -386,9 +386,9 @@ export default function Home() {
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // 9. APUNTARSE A UNA PARTIDA
-  // ==========================================================
+  // ============================================================
 
   async function join(day) {
     if (!account) {
@@ -431,9 +431,9 @@ export default function Home() {
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // 10. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
-  // ==========================================================
+  // ============================================================
 
   function canLeave(player) {
     return Boolean(
@@ -445,9 +445,9 @@ export default function Home() {
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // 11. DESAPUNTARSE
-  // ==========================================================
+  // ============================================================
 
   async function leave(id) {
     if (!account) {
@@ -508,9 +508,9 @@ export default function Home() {
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // 12. ABRIR RESASPORTS SEGÚN EL DISPOSITIVO
-  // ==========================================================
+  // ============================================================
 
   function openResasports() {
     const bookingUrl =
@@ -588,9 +588,51 @@ export default function Home() {
     );
   }
 
-  // ==========================================================
-  // 13. MARCAR RESERVA
-  // ==========================================================
+  // ============================================================
+  // 13. AVISAR POR WHATSAPP
+  // ============================================================
+
+  function notifyWhatsApp(slot, playersForDay) {
+    const orderedPlayers = [...playersForDay].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() -
+        new Date(b.created_at).getTime()
+    );
+
+    if (orderedPlayers.length !== 4) {
+      setNotice("La partida debe tener cuatro jugadores.");
+      return;
+    }
+
+    const playersList = orderedPlayers
+      .map((player, index) => {
+        const responsibleLabel =
+          index === 3 ? " 👑 Responsable" : "";
+
+        return `${index + 1}. ${player.name}${responsibleLabel}`;
+      })
+      .join("\n");
+
+    const message =
+      ` *Juega al Padel y Disfruta*\n` +
+      ` ¡Partida reservada en la web!\n` +
+      ` ${slot.label}\n` +
+      ` *Jugadores apuntados:*\n${playersList}\n` +
+      `¡Nos vemos en la pista! `;
+
+    const whatsappUrl =
+      "https://wa.me/?text=" + encodeURIComponent(message);
+
+    window.open(
+      whatsappUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  // ============================================================
+  // 14. MARCAR RESERVA
+  // ============================================================
 
   async function markReserved(id) {
     if (!account) {
@@ -651,8 +693,6 @@ export default function Home() {
       setNotice(
         "Marcada en la web. Comprueba y completa la reserva en ResaSports."
       );
-
-    //openResasports();
     } catch (error) {
       setNotice(error.message);
       await loadPlayers();
@@ -662,7 +702,7 @@ export default function Home() {
   }
 
   // ============================================================
-  // 14. CARGA INICIAL
+  // 15. CARGA INICIAL
   // ============================================================
 
   useEffect(() => {
@@ -681,7 +721,7 @@ export default function Home() {
   }, [account?.name, account?.must_change_pin]);
 
   // ============================================================
-  // 15. ESTILOS COMUNES
+  // 16. ESTILOS COMUNES
   // ============================================================
 
   const buttonStyle = {
@@ -709,7 +749,7 @@ export default function Home() {
   };
 
   // ============================================================
-  // 16. MOSTRAR UNA PARTIDA
+  // 17. MOSTRAR UNA PARTIDA
   // ============================================================
 
   function renderSlot(slot) {
@@ -931,10 +971,18 @@ export default function Home() {
 
             {!reserved && isResponsible && (
               <div style={{ marginTop: "12px" }}>
-                <strong style={{ color: "#92400E" }}>
-                 ⏳ Pendiente de reserva por el responsable. <br />
+                <strong
+                  style={{
+                    display: "block",
+                    color: "#92400E",
+                    marginBottom: "10px",
+                  }}
+                >
+                  ⏳ Pendiente de reserva por el responsable.
                 </strong>
+
                 <button
+                  type="button"
                   onClick={() => markReserved(responsible.id)}
                   disabled={busy || pinChangeRequired}
                   style={{
@@ -949,15 +997,41 @@ export default function Home() {
               </div>
             )}
 
+            {/* Reserva marcada: aviso y botón de WhatsApp. */}
             {reserved && (
               <div
                 style={{
-                  color: "#15803D",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: "12px",
                   marginTop: "10px",
-                  fontWeight: "bold",
                 }}
               >
-                ✅ Marcada como reservada en la web
+                <strong style={{ color: "#15803D" }}>
+                  ✅ Marcada como reservada en la web
+                </strong>
+
+                {isResponsible && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      notifyWhatsApp(slot, playersForDay)
+                    }
+                    disabled={busy || pinChangeRequired}
+                    style={{
+                      ...buttonStyle,
+                      backgroundColor: "#16A34A",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      opacity:
+                        busy || pinChangeRequired ? 0.7 : 1,
+                    }}
+                  >
+                    💬 Avisar por WhatsApp
+                  </button>
+                )}
               </div>
             )}
 
@@ -973,7 +1047,7 @@ export default function Home() {
   }
 
   // ============================================================
-  // 17. INTERFAZ PRINCIPAL
+  // 18. INTERFAZ PRINCIPAL
   // ============================================================
 
   return (
