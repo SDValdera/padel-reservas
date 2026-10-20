@@ -652,7 +652,7 @@ export default function Home() {
         "Marcada en la web. Comprueba y completa la reserva en ResaSports."
       );
 
-      openResasports();
+    //openResasports();
     } catch (error) {
       setNotice(error.message);
       await loadPlayers();
@@ -931,6 +931,9 @@ export default function Home() {
 
             {!reserved && isResponsible && (
               <div style={{ marginTop: "12px" }}>
+                <strong style={{ color: "#92400E" }}>
+                 ⏳ Pendiente de reserva por el responsable. <br />
+                </strong>
                 <button
                   onClick={() => markReserved(responsible.id)}
                   disabled={busy || pinChangeRequired}
