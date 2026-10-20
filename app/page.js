@@ -101,6 +101,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [view, setView] = useState("home");
 
   const { thisWeek, nextWeek } = slots;
 
@@ -246,6 +247,7 @@ export default function Home() {
       setNewPin("");
       setConfirmPin("");
       setNewName("");
+      setView("home");
 
       setNotice("Sesión cerrada.");
     } catch (error) {
@@ -313,6 +315,8 @@ export default function Home() {
 
       await loadPlayers();
 
+      setView("profile");
+
       setNotice("Nombre de usuario actualizado correctamente.");
     } catch (error) {
       setNotice(error.message);
@@ -369,6 +373,7 @@ export default function Home() {
       setConfirmPin("");
       setNewName("");
       setAuthMode("login");
+      setView("home");
 
       setNotice(
         "PIN cambiado correctamente. Inicia sesión con tu nuevo PIN."
@@ -656,9 +661,9 @@ export default function Home() {
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // 14. CARGA INICIAL
-  // ==========================================================
+  // ============================================================
 
   useEffect(() => {
     setSlots(generateSlots());
@@ -669,11 +674,15 @@ export default function Home() {
     if (account?.name) {
       setNewName(account.name);
     }
-  }, [account?.name]);
 
-  // ==========================================================
+    if (account?.must_change_pin) {
+      setView("change-pin");
+    }
+  }, [account?.name, account?.must_change_pin]);
+
+  // ============================================================
   // 15. ESTILOS COMUNES
-  // ==========================================================
+  // ============================================================
 
   const buttonStyle = {
     padding: "11px 16px",
@@ -699,9 +708,9 @@ export default function Home() {
     backgroundColor: "#FFFFFF",
   };
 
-  // ==========================================================
+  // ============================================================
   // 16. MOSTRAR UNA PARTIDA
-  // ==========================================================
+  // ============================================================
 
   function renderSlot(slot) {
     const playersForDay = players
@@ -960,9 +969,9 @@ export default function Home() {
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // 17. INTERFAZ PRINCIPAL
-  // ==========================================================
+  // ============================================================
 
   return (
     <main
@@ -1233,21 +1242,179 @@ export default function Home() {
         >
           <strong>👋 Sesión iniciada: {account.name}</strong>
 
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {!account.must_change_pin && view !== "home" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setView("home");
+                  setNotice("");
+                }}
+                style={{ ...buttonStyle, backgroundColor: "#15803D" }}
+              >
+                🎾 Volver a los partidos
+              </button>
+            )}
+
+            {!account.must_change_pin && view === "home" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setView("profile");
+                  setNotice("");
+                }}
+                style={{ ...buttonStyle, backgroundColor: "#2563EB" }}
+              >
+                👤 Mi perfil
+              </button>
+            )}
+
+            <button
+              onClick={logout}
+              disabled={busy}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#374151",
+              }}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Menú de Mi perfil. */}
+      {account && !account.must_change_pin && view === "profile" && (
+        <section
+          style={{
+            maxWidth: "560px",
+            margin: "0 auto 28px",
+            padding: "24px",
+            border: "1px solid #E2E8F0",
+            borderRadius: "16px",
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: "8px" }}>
+            👤 Mi perfil
+          </h2>
+
+          <p style={{ color: "#64748B", lineHeight: 1.5, marginTop: 0 }}>
+            Gestiona tus datos personales y la seguridad de tu cuenta.
+          </p>
+
+          <div
+            style={{
+              padding: "14px",
+              marginBottom: "16px",
+              borderRadius: "10px",
+              backgroundColor: "#F8FAFC",
+              border: "1px solid #E2E8F0",
+            }}
+          >
+            <div
+              style={{
+                color: "#64748B",
+                fontSize: "13px",
+                marginBottom: "4px",
+              }}
+            >
+              Nombre de usuario actual
+            </div>
+
+            <strong
+              style={{
+                fontSize: "18px",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {account.name}
+            </strong>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            <button
+              type="button"
+              onClick={() => {
+                setNewName(account.name || "");
+                setView("change-name");
+                setNotice("");
+              }}
+              disabled={busy}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#0F766E",
+                padding: "15px 16px",
+                textAlign: "left",
+                fontSize: "15px",
+              }}
+            >
+              ✏️ Cambiar nombre
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "12px",
+                  fontWeight: "normal",
+                  marginTop: "4px",
+                }}
+              >
+                Actualiza el nombre que utilizas para entrar y jugar.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentPin("");
+                setNewPin("");
+                setConfirmPin("");
+                setView("change-pin");
+                setNotice("");
+              }}
+              disabled={busy}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#2563EB",
+                padding: "15px 16px",
+                textAlign: "left",
+                fontSize: "15px",
+              }}
+            >
+              🔐 Cambiar PIN
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "12px",
+                  fontWeight: "normal",
+                  marginTop: "4px",
+                }}
+              >
+                Cambia tu PIN personal de acceso.
+              </span>
+            </button>
+          </div>
+
           <button
-            onClick={logout}
-            disabled={busy}
+            type="button"
+            onClick={() => {
+              setView("home");
+              setNotice("");
+            }}
             style={{
               ...buttonStyle,
               backgroundColor: "#374151",
+              marginTop: "18px",
+              width: "100%",
             }}
           >
-            Cerrar sesión
+            ← Volver a los partidos
           </button>
         </section>
       )}
 
       {/* Cambiar el nombre de usuario. */}
-      {account && !account.must_change_pin && (
+      {account && !account.must_change_pin && view === "change-name" && (
         <section
           style={{
             maxWidth: "480px",
@@ -1299,11 +1466,28 @@ export default function Home() {
               {busy ? "Guardando..." : "Guardar nombre"}
             </button>
           </form>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setView("profile");
+              setNotice("");
+            }}
+            style={{
+              ...buttonStyle,
+              backgroundColor: "#374151",
+              marginTop: "14px",
+              width: "100%",
+            }}
+          >
+            ← Volver al perfil
+          </button>
         </section>
       )}
 
       {/* Cambiar el PIN. */}
-      {account && (
+      {account && (account.must_change_pin || view === "change-pin") && (
         <section
           style={{
             maxWidth: "480px",
@@ -1422,17 +1606,36 @@ export default function Home() {
                   : "Cambiar PIN"}
             </button>
           </form>
+
+          {!account.must_change_pin && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setView("profile");
+                setNotice("");
+              }}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#374151",
+                marginTop: "14px",
+                width: "100%",
+              }}
+            >
+              ← Volver al perfil
+            </button>
+          )}
         </section>
       )}
 
-      {loading && (
+      {loading && view === "home" && (
         <p style={{ color: "#64748B" }}>
           Cargando partidas...
         </p>
       )}
 
       {/* Las dos semanas de partidas. */}
-      {!account?.must_change_pin && (
+      {view === "home" && !account?.must_change_pin && (
         <div className="weeks-grid">
           <section className="week-column">
             <h2 className="week-heading">
