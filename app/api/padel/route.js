@@ -585,6 +585,97 @@ export async function POST(request) {
     }
 
     // --------------------------------------------------
+    // ELIMINAR UN JUGADOR DE UNA PARTIDA DESDE ADMIN
+    // Solo elimina la inscripción, no la cuenta.
+    // Funciona aunque la pista esté completa o reservada.
+    // --------------------------------------------------
+
+    if (action === "admin-delete-player") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      if (
+        (typeof body.id !== "string" &&
+          typeof body.id !== "number") ||
+        String(body.id).trim() === ""
+      ) {
+        return jsonError("La inscripción no es válida.");
+      }
+
+      if (!validDate(body.day)) {
+        return jsonError("La fecha de la partida no es válida.");
+      }
+
+      const day = new Date(body.day).toISOString();
+
+      const { data: player, error: findError } =
+        await supabaseAdmin
+          .from("players")
+          .select("id, day, account_id")
+          .eq("id", body.id)
+          .eq("day", day)
+          .maybeSingle();
+
+      if (findError) {
+        console.error(
+          "Error buscando inscripción para eliminar:",
+          findError.message
+        );
+
+        return jsonError(
+          "No se ha podido consultar la inscripción.",
+          500
+        );
+      }
+
+      if (!player) {
+        return jsonError(
+          "El jugador ya no está apuntado a esa partida.",
+          404
+        );
+      }
+
+      const { data: deleted, error: deleteError } =
+        await supabaseAdmin
+          .from("players")
+          .delete()
+          .eq("id", player.id)
+          .eq("day", day)
+          .select("id")
+          .maybeSingle();
+
+      if (deleteError) {
+        console.error(
+          "Error eliminando jugador desde administración:",
+          deleteError.message
+        );
+
+        return jsonError(
+          "No se ha podido eliminar al jugador.",
+          500
+        );
+      }
+
+      if (!deleted) {
+        return jsonError(
+          "La inscripción ya no existe o ya se ha eliminado.",
+          409
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        id: deleted.id,
+        day,
+        message: "Jugador eliminado de la partida.",
+      });
+    }
+
+    // --------------------------------------------------
     // LISTAR CUENTAS ACTIVAS PARA APUNTAR DESDE ADMIN
     // --------------------------------------------------
 
@@ -649,12 +740,14 @@ export async function POST(request) {
 
       const day = new Date(body.day).toISOString();
 
-      const { data: selectedAccount, error: selectedAccountError } =
-        await supabaseAdmin
-          .from("player_accounts")
-          .select("id, name, active")
-          .eq("id", body.accountId)
-          .maybeSingle();
+      const {
+        data: selectedAccount,
+        error: selectedAccountError,
+      } = await supabaseAdmin
+        .from("player_accounts")
+        .select("id, name, active")
+        .eq("id", body.accountId)
+        .maybeSingle();
 
       if (selectedAccountError) {
         console.error(
