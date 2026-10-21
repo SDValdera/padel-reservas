@@ -1,324 +1,488 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-export default function AdminPage() {
-  // Datos del formulario de acceso.
-  const [password, setPassword] = useState("");
+// ============================================================
+// 1. GENERAR LOS PRÓXIMOS 14 DÍAS DE PARTIDAS
+// ============================================================
 
-  // Datos para crear invitaciones.
-  const [name, setName] = useState("");
-  const [invite, setInvite] = useState(null);
+function generateAdminSlots() {
+  const slots = [];
 
-  // Datos para restablecer el PIN de una cuenta existente.
-  const [resetName, setResetName] = useState("");
-  const [temporaryPin, setTemporaryPin] = useState(null);
+  const dayNames = [
+    "Domingo",
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+  ];
 
-  // Estado general de la página.
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const schedules = {
+    0: ["09:30", "11:00"],
+    1: ["18:30", "20:00"],
+    2: ["18:30", "20:00"],
+    3: ["18:30", "20:00"],
+    4: ["18:30", "20:00"],
+    5: ["18:30", "20:00"],
+    6: ["09:30", "11:00"],
+  };
 
-  // ====================================================
-  // COMUNICACIÓN CON LA API
-  // ====================================================
+  const today = new Date();
 
-  async function api(action, values = {}) {
-    const response = await fetch("/api/padel", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ action, ...values }),
-    });
+  for (let i = 0; i < 14; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
 
-    const result = await response.json().catch(() => ({}));
+    for (const time of schedules[date.getDay()]) {
+      const [hours, minutes] = time.split(":").map(Number);
 
-    if (!response.ok) {
-      throw new Error(result.error || "Ha ocurrido un error.");
+      const slotDate = new Date(date);
+      slotDate.setHours(hours, minutes, 0, 0);
+
+      const day = String(slotDate.getDate()).padStart(2, "0");
+      const month = String(slotDate.getMonth() + 1).padStart(2, "0");
+
+      slots.push({
+        id: slotDate.toISOString(),
+        label: `${dayNames[slotDate.getDay()]} ${day}/${month} · ${time}`,
+      });
     }
-
-    return result;
   }
 
-  // ====================================================
-  // COMPROBAR SI YA HAY UNA SESIÓN DE ADMINISTRADOR
-  // ====================================================
+  return slots;
+}
 
-  useEffect(() => {
-    let active = true;
+// ============================================================
+// 2. COMUNICACIÓN CON LA API
+// Muestra el detalle del error si una petición falla.
+// ============================================================
 
-    api("admin-status")
-      .then((result) => {
-        if (active) {
-          setAuthenticated(result.authenticated === true);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setMessage("No se ha podido comprobar la sesión.");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+async function api(action, data = {}) {
+  let response;
 
-    // Evitar actualizar el estado si la página se desmonta.
-    return () => {
-      active = false;
-    };
+  try {
+    response = await fetch("/api/padel", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      cache: "no-store",
+      body: JSON.stringify({
+        action,
+        ...data,
+      }),
+    });
+  } catch {
+    throw new Error(
+      "No se puede conectar con /api/padel. Comprueba que el servidor esté iniciado."
+    );
+  }
+
+  const responseText = await response.text();
+
+  let result = {};
+
+  try {
+    result = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    const detail =
+      result.error ||
+      result.message ||
+      (responseText
+        ? responseText.slice(0, 300)
+        : "La API no ha devuelto detalles.");
+
+    throw new Error(`Error API (${response.status}): ${detail}`);
+  }
+
+  return result;
+}
+
+// ============================================================
+// 3. PANEL DE ADMINISTRACIÓN
+// ============================================================
+
+export default function AdminPage() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState(false);
+  const [password, setPassword] = useState("");
+
+  const [accounts, setAccounts] = useState([]);
+  const [slots, setSlots] = useState([]);
+
+  const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
+
+  const [inviteName, setInviteName] = useState("");
+  const [inviteResult, setInviteResult] = useState(null);
+
+  const [resetName, setResetName] = useState("");
+  const [resetResult, setResetResult] = useState(null);
+
+  // ==========================================================
+  // MENSAJES
+  // ==========================================================
+
+  const showNotice = (message, isError = false) => {
+    setNotice(message);
+    setError(isError);
+  };
+
+  // ==========================================================
+  // CARGAR CUENTAS DE JUGADORES
+  // ==========================================================
+
+  const loadAccounts = useCallback(async () => {
+    const result = await api("admin-list-accounts");
+    const loadedAccounts = result.accounts || [];
+
+    setAccounts(loadedAccounts);
+
+    setSelectedAccount(
+      (current) => current || loadedAccounts[0]?.id || ""
+    );
+
+    setResetName(
+      (current) => current || loadedAccounts[0]?.name || ""
+    );
   }, []);
 
-  // ====================================================
-  // INICIAR SESIÓN DE ADMINISTRADOR
-  // ====================================================
+  // ==========================================================
+  // INICIALIZACIÓN
+  // La fecha se calcula dentro de useEffect.
+  // ==========================================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setSlots(generateAdminSlots());
+
+    async function initialize() {
+      try {
+        const result = await api("admin-status");
+
+        if (cancelled) return;
+
+        const isAuthenticated = result.authenticated === true;
+        setAuthenticated(isAuthenticated);
+
+        if (isAuthenticated) {
+          await loadAccounts();
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAuthenticated(false);
+          showNotice(e.message, true);
+        }
+      } finally {
+        if (!cancelled) {
+          setChecking(false);
+        }
+      }
+    }
+
+    initialize();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAccounts]);
+
+  // ==========================================================
+  // INICIAR SESIÓN
+  // ==========================================================
 
   async function login(event) {
     event.preventDefault();
+
     if (busy) return;
 
     setBusy(true);
-    setMessage("");
+    showNotice("");
 
     try {
       await api("admin-login", { password });
 
-      setAuthenticated(true);
       setPassword("");
-      setMessage("Sesión de administrador iniciada.");
-    } catch (error) {
-      setMessage(error.message);
+      setAuthenticated(true);
+
+      await loadAccounts();
+
+      showNotice("Sesión de administrador iniciada.");
+    } catch (e) {
+      showNotice(e.message || "Error desconocido al iniciar sesión.", true);
     } finally {
       setBusy(false);
     }
   }
 
-  // ====================================================
-  // GENERAR INVITACIÓN PARA UN NUEVO JUGADOR
-  // ====================================================
+  // ==========================================================
+  // CERRAR SESIÓN
+  // ==========================================================
 
-  async function createInvite(event) {
-    event.preventDefault();
+  async function logout() {
     if (busy) return;
 
-    const cleanName = name.trim();
+    setBusy(true);
 
-    if (cleanName.length < 2 || cleanName.length > 60) {
-      setMessage("El nombre debe tener entre 2 y 60 caracteres.");
+    try {
+      await api("admin-logout");
+
+      setAuthenticated(false);
+      setAccounts([]);
+      setSelectedAccount("");
+      setSelectedSlot("");
+      setInviteResult(null);
+      setResetResult(null);
+
+      showNotice("Has cerrado la sesión de administrador.");
+    } catch (e) {
+      showNotice(e.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ==========================================================
+  // APUNTAR JUGADOR A UNA PARTIDA
+  // ==========================================================
+
+  async function adminJoin(event) {
+    event.preventDefault();
+
+    if (!selectedAccount || !selectedSlot || busy) {
+      showNotice("Selecciona un jugador y un horario.", true);
       return;
     }
 
     setBusy(true);
-    setMessage("");
-    setInvite(null);
+    showNotice("");
+
+    try {
+      const result = await api("admin-join", {
+        accountId: selectedAccount,
+        day: selectedSlot,
+      });
+
+      const account = accounts.find(
+        (item) => item.id === selectedAccount
+      );
+
+      showNotice(
+        `✅ ${result.name || account?.name || "El jugador"} se ha apuntado correctamente.`
+      );
+    } catch (e) {
+      showNotice(e.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ==========================================================
+  // CREAR INVITACIÓN
+  // ==========================================================
+
+  async function createInvite(event) {
+    event.preventDefault();
+
+    if (busy) return;
+
+    const cleanName = inviteName.trim();
+
+    if (cleanName.length < 2 || cleanName.length > 60) {
+      showNotice("El nombre debe tener entre 2 y 60 caracteres.", true);
+      return;
+    }
+
+    setBusy(true);
+    setInviteResult(null);
+    showNotice("");
 
     try {
       const result = await api("create-invite", {
         name: cleanName,
       });
 
-      setInvite(result);
-      setName("");
-      setMessage("Invitación generada correctamente.");
-    } catch (error) {
-      setMessage(error.message);
+      setInviteResult(result);
+      setInviteName("");
+
+      showNotice(`Invitación creada para ${result.name}.`);
+    } catch (e) {
+      showNotice(e.message, true);
     } finally {
       setBusy(false);
     }
   }
 
-  // Copiar la invitación para compartirla por WhatsApp.
-  async function copyInvite() {
-    if (!invite) return;
+  // ==========================================================
+  // RESTABLECER PIN
+  // ==========================================================
 
-    const text = [
-      `Hola ${invite.name},`,
-      "",
-      "Te invito a crear tu cuenta para las reservas de pádel.",
-      `Tu código de invitación es: ${invite.code}`,
-      "",
-      "Entra en la web de reservas y pulsa «Crear cuenta con invitación».",
-      "Introduce tu nombre, el código y crea tu PIN personal.",
-    ].join("\n");
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setMessage("Invitación copiada. Ya puedes pegarla en WhatsApp.");
-    } catch {
-      setMessage(
-        "No se ha podido copiar automáticamente. Selecciona el código y cópialo."
-      );
-    }
-  }
-
-  // ====================================================
-  // RESTABLECER EL PIN DE UN JUGADOR EXISTENTE
-  // ====================================================
-
-  async function resetPlayerPin(event) {
+  async function resetPin(event) {
     event.preventDefault();
-    if (busy) return;
 
-    const cleanName = resetName.trim();
-
-    if (cleanName.length < 2 || cleanName.length > 60) {
-      setMessage("Introduce un nombre válido.");
-      return;
-    }
+    if (busy || !resetName) return;
 
     setBusy(true);
-    setMessage("");
-    setTemporaryPin(null);
+    setResetResult(null);
+    showNotice("");
 
     try {
-      // La API comprueba la sesión de administrador.
       const result = await api("admin-reset-pin", {
-        name: cleanName,
+        name: resetName,
       });
 
-      setTemporaryPin(result);
-      setResetName("");
+      setResetResult(result);
 
-      if (result.sessionsInvalidated) {
-        setMessage(
-          "PIN temporal generado. Las sesiones anteriores se han invalidado."
-        );
-      } else {
-        setMessage(
-          "PIN temporal generado, pero hay que revisar la invalidación de sesiones en el servidor."
-        );
-      }
-    } catch (error) {
-      setMessage(error.message);
+      showNotice(`PIN temporal generado para ${result.name}.`);
+    } catch (e) {
+      showNotice(e.message, true);
     } finally {
       setBusy(false);
     }
   }
 
-  // Copiar el PIN temporal para enviarlo al jugador.
-  async function copyTemporaryPin() {
-    if (!temporaryPin?.temporaryPin) return;
-
-    const text = [
-      `Hola ${temporaryPin.name},`,
-      "",
-      `Tu PIN temporal para las reservas de pádel es: ${temporaryPin.temporaryPin}`,
-      "",
-      "Entra en la web, inicia sesión con tu nombre y este PIN, y cámbialo por uno personal.",
-    ].join("\n");
-
-    try {
-      await navigator.clipboard.writeText(text);
-      setMessage("PIN copiado. Ya puedes pegarlo en WhatsApp.");
-    } catch {
-      setMessage(
-        "No se ha podido copiar automáticamente. Selecciona el PIN y cópialo."
-      );
-    }
-  }
-
-  // ====================================================
-  // CERRAR SESIÓN DE ADMINISTRADOR
-  // ====================================================
-
-  async function logout() {
-    if (busy) return;
-
-    setBusy(true);
-    setMessage("");
-
-    try {
-      await api("admin-logout");
-
-      setAuthenticated(false);
-      setInvite(null);
-      setTemporaryPin(null);
-      setPassword("");
-      setMessage("Sesión de administrador cerrada.");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // ====================================================
-  // ESTILOS COMPARTIDOS
-  // ====================================================
+  // ==========================================================
+  // ESTILOS
+  // ==========================================================
 
   const inputStyle = {
     display: "block",
     width: "100%",
     boxSizing: "border-box",
     padding: "12px",
-    marginTop: "6px",
-    border: "1px solid #D1D5DB",
-    borderRadius: "8px",
-    fontSize: "16px",
+    margin: "7px 0 14px",
+    border: "1px solid #CBD5E1",
+    borderRadius: "9px",
+    fontSize: "15px",
+    background: "white",
+    color: "#0F172A",
   };
 
-  const primaryButtonStyle = {
-    padding: "11px 16px",
-    border: "none",
-    borderRadius: "8px",
-    backgroundColor: "#2563EB",
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    cursor: busy ? "not-allowed" : "pointer",
-    opacity: busy ? 0.7 : 1,
+  const buttonStyle = {
+    padding: "12px 16px",
+    border: 0,
+    borderRadius: "9px",
+    color: "white",
+    fontWeight: 700,
+    fontSize: "14px",
+    cursor: busy ? "wait" : "pointer",
   };
 
-  const sectionStyle = {
-    marginTop: "24px",
+  const panelStyle = {
+    background: "white",
+    border: "1px solid #E2E8F0",
+    borderRadius: "14px",
     padding: "20px",
-    border: "1px solid #E5E7EB",
-    borderRadius: "12px",
+    marginBottom: "18px",
+    boxShadow: "0 2px 8px rgba(15,23,42,.04)",
   };
 
-  // ====================================================
+  // ==========================================================
+  // PANTALLA DE CARGA
+  // ==========================================================
+
+  if (checking) {
+    return (
+      <main
+        style={{
+          maxWidth: 850,
+          margin: "40px auto",
+          padding: 20,
+          fontFamily: "Arial,sans-serif",
+        }}
+      >
+        Cargando panel de administración…
+      </main>
+    );
+  }
+
+  // ==========================================================
   // INTERFAZ
-  // ====================================================
+  // ==========================================================
 
   return (
     <main
       style={{
-        maxWidth: "650px",
-        margin: "0 auto",
-        padding: "24px 16px",
-        fontFamily: "Arial, sans-serif",
-        color: "#1F2937",
+        maxWidth: 850,
+        margin: "28px auto",
+        padding: "0 16px 40px",
+        fontFamily: "Arial,sans-serif",
+        color: "#0F172A",
       }}
     >
-      <h1>🎾 Administración de pádel</h1>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 20,
+        }}
+      >
+        <div>
+          <h1 style={{ margin: "0 0 6px", fontSize: 28 }}>
+            🎾 Administración de pádel
+          </h1>
 
-      <p>
-        Gestiona las invitaciones y los PIN de los jugadores.
-      </p>
+          <p style={{ margin: 0, color: "#64748B" }}>
+            Gestiona las inscripciones y las cuentas de jugadores.
+          </p>
+        </div>
 
-      {/* Mensajes de éxito y error. */}
-      {message && (
+        {authenticated && (
+          <button
+            type="button"
+            onClick={logout}
+            disabled={busy}
+            style={{
+              ...buttonStyle,
+              background: "#374151",
+            }}
+          >
+            Cerrar sesión
+          </button>
+        )}
+      </header>
+
+      {notice && (
         <div
           role="status"
           style={{
-            padding: "12px",
-            margin: "16px 0",
-            backgroundColor: "#F3F4F6",
-            borderRadius: "8px",
+            padding: "12px 14px",
+            borderRadius: 10,
+            marginBottom: 18,
+            background: error ? "#FEF2F2" : "#ECFDF5",
+            color: error ? "#991B1B" : "#065F46",
+            border: `1px solid ${
+              error ? "#FECACA" : "#A7F3D0"
+            }`,
             overflowWrap: "anywhere",
+            whiteSpace: "pre-wrap",
           }}
         >
-          {message}
+          {notice}
         </div>
       )}
 
-      {loading ? (
-        <p>Comprobando sesión...</p>
-      ) : !authenticated ? (
-        // Pantalla de acceso privado del administrador.
-        <section style={sectionStyle}>
-          <h2>Acceso privado</h2>
+      {!authenticated ? (
+        <section style={panelStyle}>
+          <h2 style={{ marginTop: 0 }}>
+            🔐 Acceso de administrador
+          </h2>
 
           <form onSubmit={login}>
             <label htmlFor="admin-password">
@@ -330,73 +494,115 @@ export default function AdminPage() {
               type="password"
               autoComplete="current-password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               required
-              maxLength={200}
               style={inputStyle}
             />
 
             <button
               type="submit"
               disabled={busy}
-              style={{ ...primaryButtonStyle, marginTop: "16px" }}
+              style={{
+                ...buttonStyle,
+                background: "#0F766E",
+                opacity: busy ? 0.7 : 1,
+              }}
             >
-              {busy ? "Comprobando..." : "Entrar"}
+              {busy ? "Entrando…" : "Entrar"}
             </button>
           </form>
         </section>
       ) : (
-        // Panel visible únicamente al administrador autenticado.
         <>
-          <section style={sectionStyle}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "12px",
-                flexWrap: "wrap",
-              }}
-            >
-              <h2>Panel de administración</h2>
+          {/* APUNTAR JUGADOR A UNA PARTIDA */}
+          <section
+            style={{
+              ...panelStyle,
+              borderColor: "#99F6E4",
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              ➕ Apuntar un jugador a una partida
+            </h2>
 
-              <button
-                type="button"
-                onClick={logout}
-                disabled={busy}
-                style={{
-                  padding: "8px 12px",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: "8px",
-                  backgroundColor: "#FFFFFF",
-                  cursor: busy ? "not-allowed" : "pointer",
-                }}
-              >
-                Cerrar sesión
-              </button>
-            </div>
-          </section>
-
-          {/* Sección para dar de alta nuevos jugadores. */}
-          <section style={sectionStyle}>
-            <h2>Generar invitación</h2>
-
-            <p>
-              Introduce el nombre del jugador al que quieres autorizar
-              a crear su cuenta.
+            <p style={{ color: "#475569", lineHeight: 1.5 }}>
+              Elige un jugador con cuenta activa y un horario.
+              No necesitas conocer su PIN. La API debe comprobar
+              el límite de cuatro plazas y evitar duplicados.
             </p>
 
+            <form onSubmit={adminJoin}>
+              <label htmlFor="player-select">Jugador</label>
+
+              <select
+                id="player-select"
+                value={selectedAccount}
+                onChange={(e) => setSelectedAccount(e.target.value)}
+                required
+                style={inputStyle}
+              >
+                <option value="">Selecciona un jugador…</option>
+
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+
+              <label htmlFor="slot-select">Día y horario</label>
+
+              <select
+                id="slot-select"
+                value={selectedSlot}
+                onChange={(e) => setSelectedSlot(e.target.value)}
+                required
+                style={inputStyle}
+              >
+                <option value="">Selecciona una partida…</option>
+
+                {slots.map((slot) => (
+                  <option key={slot.id} value={slot.id}>
+                    {slot.label}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="submit"
+                disabled={busy || !accounts.length || !slots.length}
+                style={{
+                  ...buttonStyle,
+                  background: "#0F766E",
+                  opacity: busy ? 0.7 : 1,
+                }}
+              >
+                {busy ? "Apuntando…" : "Apuntar jugador"}
+              </button>
+
+              {!accounts.length && (
+                <p style={{ color: "#B45309" }}>
+                  No hay cuentas activas disponibles.
+                </p>
+              )}
+            </form>
+          </section>
+
+          {/* CREAR INVITACIÓN */}
+          <section style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>
+              ✉️ Crear invitación para un jugador nuevo
+            </h2>
+
             <form onSubmit={createInvite}>
-              <label htmlFor="player-name">Nombre del jugador</label>
+              <label htmlFor="invite-name">Nombre del jugador</label>
 
               <input
-                id="player-name"
-                type="text"
-                autoComplete="off"
+                id="invite-name"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
                 minLength={2}
                 maxLength={60}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
                 required
                 style={inputStyle}
               />
@@ -404,150 +610,143 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={busy}
-                style={{ ...primaryButtonStyle, marginTop: "16px" }}
+                style={{
+                  ...buttonStyle,
+                  background: "#2563EB",
+                }}
               >
-                {busy ? "Generando..." : "Generar invitación"}
+                {busy ? "Creando…" : "Crear invitación"}
               </button>
             </form>
 
-            {invite && (
+            {inviteResult && (
               <div
                 style={{
-                  marginTop: "24px",
-                  padding: "16px",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: "10px",
-                  backgroundColor: "#F9FAFB",
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: 9,
+                  background: "#EFF6FF",
+                  overflowWrap: "anywhere",
                 }}
               >
-                <h3>Invitación para {invite.name}</h3>
+                <strong>
+                  Invitación para {inviteResult.name}
+                </strong>
 
-                <p>
-                  Comparte el código con el jugador. Solo se muestra
-                  en esta respuesta.
+                <p style={{ marginBottom: 6 }}>
+                  Código de invitación:
                 </p>
 
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: "8px",
-                    backgroundColor: "#FFFFFF",
-                    border: "1px solid #D1D5DB",
-                    overflowWrap: "anywhere",
-                    fontFamily: "monospace",
-                    userSelect: "all",
-                  }}
-                >
-                  {invite.code}
+                <code>{inviteResult.code}</code>
+
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard?.writeText(inviteResult.code)
+                    }
+                    style={{
+                      ...buttonStyle,
+                      background: "#1D4ED8",
+                    }}
+                  >
+                    Copiar código
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={copyInvite}
-                  style={{
-                    ...primaryButtonStyle,
-                    marginTop: "12px",
-                  }}
-                >
-                  Copiar invitación para WhatsApp
-                </button>
+                <p style={{ fontSize: 12, color: "#475569" }}>
+                  Comparte este código con el jugador para que registre su cuenta.
+                </p>
               </div>
             )}
           </section>
 
-          {/* Sección para recuperar la cuenta de un jugador. */}
-          <section style={sectionStyle}>
-            <h2>Restablecer PIN</h2>
+          {/* RESTABLECER PIN */}
+          <section style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>
+              🔑 Restablecer PIN de un jugador
+            </h2>
 
-            <p>
-              Usa esta opción si un jugador ha olvidado su PIN.
-              Se generará uno temporal y deberá cambiarlo al entrar.
-            </p>
+            <form onSubmit={resetPin}>
+              <label htmlFor="reset-player">Jugador</label>
 
-            <form onSubmit={resetPlayerPin}>
-              <label htmlFor="reset-player-name">
-                Nombre del jugador existente
-              </label>
-
-              <input
-                id="reset-player-name"
-                type="text"
-                autoComplete="off"
-                minLength={2}
-                maxLength={60}
+              <select
+                id="reset-player"
                 value={resetName}
-                onChange={(event) => setResetName(event.target.value)}
+                onChange={(e) => setResetName(e.target.value)}
                 required
                 style={inputStyle}
-              />
+              >
+                <option value="">Selecciona un jugador…</option>
+
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.name}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
 
               <button
                 type="submit"
-                disabled={busy}
-                style={{ ...primaryButtonStyle, marginTop: "16px" }}
+                disabled={busy || !accounts.length}
+                style={{
+                  ...buttonStyle,
+                  background: "#7C3AED",
+                }}
               >
-                {busy ? "Restableciendo..." : "Generar PIN temporal"}
+                {busy ? "Generando…" : "Generar PIN temporal"}
               </button>
             </form>
 
-            {temporaryPin && (
+            {resetResult && (
               <div
                 style={{
-                  marginTop: "24px",
-                  padding: "16px",
-                  border: "1px solid #D1D5DB",
-                  borderRadius: "10px",
-                  backgroundColor: "#F9FAFB",
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: 9,
+                  background: "#FFFBEB",
+                  border: "1px solid #FDE68A",
                 }}
               >
-                <h3>PIN temporal de {temporaryPin.name}</h3>
+                <strong>
+                  PIN temporal de {resetResult.name}
+                </strong>
 
-                <p>
-                  Entrégalo directamente al jugador. No se guarda
-                  en texto plano en la base de datos.
-                </p>
-
-                <div
+                <p
                   style={{
-                    padding: "12px",
-                    borderRadius: "8px",
-                    backgroundColor: "#FFFFFF",
-                    border: "1px solid #D1D5DB",
-                    overflowWrap: "anywhere",
-                    fontFamily: "monospace",
-                    fontSize: "20px",
-                    userSelect: "all",
+                    fontSize: 24,
+                    fontWeight: 800,
+                    letterSpacing: 2,
+                    margin: "8px 0",
                   }}
                 >
-                  {temporaryPin.temporaryPin}
-                </div>
+                  {resetResult.temporaryPin}
+                </p>
 
                 <button
                   type="button"
-                  onClick={copyTemporaryPin}
+                  onClick={() =>
+                    navigator.clipboard?.writeText(
+                      resetResult.temporaryPin
+                    )
+                  }
                   style={{
-                    ...primaryButtonStyle,
-                    marginTop: "12px",
+                    ...buttonStyle,
+                    background: "#92400E",
                   }}
                 >
-                  Copiar PIN para WhatsApp
+                  Copiar PIN
                 </button>
+
+                <p style={{ fontSize: 12, color: "#78350F" }}>
+                  El jugador deberá cambiarlo al iniciar sesión.
+                  Este PIN solo se muestra aquí una vez.
+                </p>
               </div>
             )}
           </section>
         </>
       )}
-
-      <p
-        style={{
-          marginTop: "28px",
-          fontSize: "13px",
-          color: "#6B7280",
-        }}
-      >
-        Los PIN se guardan mediante hash. El administrador solo ve
-        el PIN temporal cuando lo genera.
-      </p>
     </main>
   );
 }
