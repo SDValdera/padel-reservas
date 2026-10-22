@@ -1353,11 +1353,11 @@ export default function Home() {
                   }}
                   style={{ ...buttonStyle, backgroundColor: "#0F766E" }}
                 >
-                  🎾 Ver pozo
+                  🎾 Ver Torneo
                 </button>
               </>
             )}
-            
+
             <button
               onClick={logout}
               disabled={busy}

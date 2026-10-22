@@ -67,7 +67,7 @@ export default function PozoPage() {
 
   async function joinPozo() {
     if (!account) {
-      setNotice("Inicia sesión en la página principal para apuntarte al pozo.");
+      setNotice("Inicia sesión en la página principal para apuntarte al Torneo.");
       return;
     }
 
@@ -86,7 +86,7 @@ export default function PozoPage() {
     try {
       await api("pozo-join", { pozoId: pozo.id });
       await loadPozo();
-      setNotice("Te has apuntado al pozo correctamente.");
+      setNotice("Te has apuntado al Torneo correctamente.");
     } catch (error) {
       setNotice(error.message);
       await loadPozo();
@@ -114,7 +114,7 @@ export default function PozoPage() {
     try {
       await api("pozo-leave", { registrationId });
       await loadPozo();
-      setNotice("Te has desapuntado del pozo.");
+      setNotice("Te has desapuntado del Torneo.");
     } catch (error) {
       setNotice(error.message);
       await loadPozo();
@@ -175,7 +175,7 @@ export default function PozoPage() {
         }}
       >
         <h1 style={{ margin: "0 0 8px", fontSize: "clamp(26px, 5vw, 36px)" }}>
-          🎾 El Pozo
+          🎾 El Torneo
         </h1>
         <p style={{ margin: 0 }}>
           Consulta los inscritos y gestiona tu participación.
@@ -219,7 +219,7 @@ export default function PozoPage() {
       )}
 
       {loading ? (
-        <p>Cargando información del pozo...</p>
+        <p>Cargando información del Torneo...</p>
       ) : !account ? (
         <section style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>🔐 Inicia sesión</h2>
@@ -235,7 +235,7 @@ export default function PozoPage() {
       ) : account.must_change_pin ? (
         <section style={cardStyle}>
           <h2 style={{ marginTop: 0 }}>🔐 Cambia tu PIN</h2>
-          <p>Debes cambiar tu PIN temporal en tu perfil antes de participar en el pozo.</p>
+          <p>Debes cambiar tu PIN temporal en tu perfil antes de participar en el Torneo.</p>
           <button
             type="button"
             onClick={() => { window.location.href = "/"; }}
@@ -246,9 +246,9 @@ export default function PozoPage() {
         </section>
       ) : !pozo ? (
         <section style={cardStyle}>
-          <h2 style={{ marginTop: 0 }}>🎾 No hay ningún pozo activo</h2>
+          <h2 style={{ marginTop: 0 }}>🎾 No hay ningún Torneo activo</h2>
           <p>
-            Todavía no se ha creado un pozo o el último ya ha pasado. Cuando el administrador
+            Todavía no se ha creado un Torneo o el último ya ha pasado. Cuando el administrador
             cree uno nuevo, aparecerá aquí.
           </p>
         </section>
@@ -256,7 +256,7 @@ export default function PozoPage() {
         <>
           <section style={cardStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-              <h2 style={{ margin: 0, fontSize: "24px" }}>🎾 Pozo de pádel</h2>
+              <h2 style={{ margin: 0, fontSize: "24px" }}>🎾 Torneo de pádel</h2>
               <span style={pillStyle}>
                 {players.length}/30 participantes
               </span>
@@ -284,7 +284,7 @@ export default function PozoPage() {
                     opacity: !canJoin || busy ? 0.65 : 1,
                   }}
                 >
-                  {busy ? "Procesando..." : isFull ? "Pozo completo" : "＋ Apuntarme al pozo"}
+                  {busy ? "Procesando..." : isFull ? "Torneo completo" : "＋ Apuntarme al Torneo"}
                 </button>
               ) : (
                 <button
@@ -293,7 +293,7 @@ export default function PozoPage() {
                   disabled={busy}
                   style={{ ...buttonStyle, backgroundColor: "#DC2626", opacity: busy ? 0.65 : 1 }}
                 >
-                  {busy ? "Procesando..." : "Desapuntarme del pozo"}
+                  {busy ? "Procesando..." : "Desapuntarme del Torneo"}
                 </button>
               )}
             </div>

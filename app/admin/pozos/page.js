@@ -219,7 +219,7 @@ export default function AdminPozosPage() {
         titular_count: titularNumber,
       });
 
-      setNotice("Pozo creado correctamente.");
+      setNotice("Torneo creado correctamente.");
 
       await loadData();
     } catch (error) {
@@ -238,7 +238,7 @@ export default function AdminPozosPage() {
     try {
       await api("admin-pozo-join", { pozoId, accountId });
 
-      setNotice("Jugador añadido al pozo.");
+      setNotice("Jugador añadido al Torneo.");
 
       await loadData();
     } catch (error) {
@@ -251,7 +251,7 @@ export default function AdminPozosPage() {
   async function removePlayer(registrationId) {
     if (
       busy ||
-      !window.confirm("¿Quieres quitar a este jugador del pozo?")
+      !window.confirm("¿Quieres quitar a este jugador del Torneo?")
     ) {
       return;
     }
@@ -278,7 +278,7 @@ export default function AdminPozosPage() {
     if (
       busy ||
       !window.confirm(
-        "¿Seguro que quieres eliminar este pozo y todas sus inscripciones?"
+        "¿Seguro que quieres eliminar este Torneo y todas sus inscripciones?"
       )
     ) {
       return;
@@ -290,7 +290,7 @@ export default function AdminPozosPage() {
     try {
       await api("admin-delete-pozo", { pozoId });
 
-      setNotice("Pozo eliminado.");
+      setNotice("Torneo eliminado.");
 
       await loadData();
     } catch (error) {
@@ -343,7 +343,7 @@ export default function AdminPozosPage() {
           }}
         >
           <h1 style={{ marginTop: 0 }}>
-            🔐 Administración de pozos
+            🔐 Administración de Torneos
           </h1>
 
           <p style={{ color: "#64748B" }}>
@@ -410,11 +410,11 @@ export default function AdminPozosPage() {
             fontSize: "clamp(25px, 5vw, 34px)",
           }}
         >
-          🎾 Administración de pozos
+          🎾 Administración de Torneos
         </h1>
 
         <p style={{ marginBottom: 0 }}>
-          Crea los pozos y gestiona titulares y reservas.
+          Crea los Torneos y gestiona titulares y reservas.
         </p>
       </header>
 
@@ -467,7 +467,7 @@ export default function AdminPozosPage() {
       </div>
 
       <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>＋ Crear un pozo</h2>
+        <h2 style={{ marginTop: 0 }}>＋ Crear un Torneo</h2>
 
         <form onSubmit={createPozo}>
           <div style={formGridStyle}>
@@ -565,7 +565,7 @@ export default function AdminPozosPage() {
               opacity: busy || !today ? 0.7 : 1,
             }}
           >
-            {busy ? "Guardando..." : "＋ Crear pozo"}
+            {busy ? "Guardando..." : "＋ Crear Torneo"}
           </button>
         </form>
       </section>
@@ -577,7 +577,7 @@ export default function AdminPozosPage() {
 
         {pozos.length === 0 ? (
           <p>
-            No hay pozos activos o futuros. Puedes crear uno arriba.
+            No hay Torneos activos o futuros. Puedes crear uno arriba.
           </p>
         ) : (
           <div style={{ display: "grid", gap: "18px" }}>
@@ -655,7 +655,7 @@ export default function AdminPozosPage() {
                         alignSelf: "flex-start",
                       }}
                     >
-                      Eliminar pozo
+                      Eliminar Torneo
                     </button>
                   </div>
 
