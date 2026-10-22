@@ -20,7 +20,11 @@ async function api(action, data = {}) {
   } catch {}
 
   if (!response.ok) {
-    throw new Error(result.error || result.message || `Error API (${response.status})`);
+    throw new Error(
+      result.error ||
+      result.message ||
+      `Error API (${response.status})`
+    );
   }
 
   return result;
@@ -136,49 +140,75 @@ export default function AdminPage() {
 
   if (checking) {
     return (
-      <main style={{ maxWidth: 700, margin: "40px auto", padding: 20, fontFamily: "Arial,sans-serif" }}>
+      <main
+        style={{
+          maxWidth: 700,
+          margin: "40px auto",
+          padding: 20,
+          fontFamily: "Arial,sans-serif",
+        }}
+      >
         Comprobando la sesión de administrador…
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 700, margin: "28px auto", padding: "0 16px 40px", fontFamily: "Arial,sans-serif", color: "#0F172A" }}>
+    <main
+      style={{
+        maxWidth: 700,
+        margin: "28px auto",
+        padding: "0 16px 40px",
+        fontFamily: "Arial,sans-serif",
+        color: "#0F172A",
+      }}
+    >
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 28, margin: "0 0 8px" }}>
           🎾 Administración de pádel
         </h1>
+
         <p style={{ color: "#64748B", margin: 0 }}>
           Selecciona qué gestión quieres realizar.
         </p>
       </header>
 
       {notice && (
-        <div role="status" style={{
-          padding: 12,
-          borderRadius: 9,
-          marginBottom: 16,
-          background: isError ? "#FEF2F2" : "#ECFDF5",
-          color: isError ? "#991B1B" : "#065F46",
-          whiteSpace: "pre-wrap",
-          overflowWrap: "anywhere",
-        }}>
+        <div
+          role="status"
+          style={{
+            padding: 12,
+            borderRadius: 9,
+            marginBottom: 16,
+            background: isError ? "#FEF2F2" : "#ECFDF5",
+            color: isError ? "#991B1B" : "#065F46",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+          }}
+        >
           {notice}
         </div>
       )}
 
       {!authenticated ? (
         <section style={panelStyle}>
-          <h2 style={{ marginTop: 0 }}>🔐 Acceso de administrador</h2>
+          <h2 style={{ marginTop: 0 }}>
+            🔐 Acceso de administrador
+          </h2>
 
           <form onSubmit={login}>
-            <label htmlFor="admin-password">Contraseña de administrador</label>
+            <label htmlFor="admin-password">
+              Contraseña de administrador
+            </label>
+
             <input
               id="admin-password"
               type="password"
               autoComplete="current-password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) =>
+                setPassword(event.target.value)
+              }
               required
               style={inputStyle}
             />
@@ -186,7 +216,11 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={busy}
-              style={{ ...buttonStyle, background: "#0F766E", opacity: busy ? 0.7 : 1 }}
+              style={{
+                ...buttonStyle,
+                background: "#0F766E",
+                opacity: busy ? 0.7 : 1,
+              }}
             >
               {busy ? "Entrando…" : "Entrar"}
             </button>
@@ -195,27 +229,76 @@ export default function AdminPage() {
       ) : (
         <>
           <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Gestionar partidas</h2>
+            <h2 style={{ marginTop: 0 }}>
+              🎾 Gestión de pozos
+            </h2>
+
             <p style={{ color: "#64748B", lineHeight: 1.5 }}>
-              Apunta jugadores o elimina inscripciones desde pantallas separadas.
+              Crear pozos, establecer horarios y duración,
+              elegir el número de titulares y gestionar
+              participantes y reservas.
             </p>
 
-            <a href="/admin/apuntar" style={{ ...buttonStyle, background: "#0F766E", marginBottom: 12 }}>
+            <a
+              href="/admin/pozos"
+              style={{
+                ...buttonStyle,
+                background: "#7C3AED",
+              }}
+            >
+              🎾 Gestionar pozo
+            </a>
+          </section>
+
+          <section style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>
+              Gestionar partidas
+            </h2>
+
+            <p style={{ color: "#64748B", lineHeight: 1.5 }}>
+              Apunta jugadores o elimina inscripciones desde
+              pantallas separadas.
+            </p>
+
+            <a
+              href="/admin/apuntar"
+              style={{
+                ...buttonStyle,
+                background: "#0F766E",
+                marginBottom: 12,
+              }}
+            >
               ➕ Apuntar jugadores
             </a>
 
-            <a href="/admin/eliminar" style={{ ...buttonStyle, background: "#DC2626" }}>
+            <a
+              href="/admin/eliminar"
+              style={{
+                ...buttonStyle,
+                background: "#DC2626",
+              }}
+            >
               🗑️ Eliminar jugadores
             </a>
           </section>
 
           <section style={panelStyle}>
-            <h2 style={{ marginTop: 0 }}>Gestión de cuentas</h2>
+            <h2 style={{ marginTop: 0 }}>
+              Gestión de cuentas
+            </h2>
+
             <p style={{ color: "#64748B", lineHeight: 1.5 }}>
-              Crear invitaciones para nuevos jugadores y restablecer PIN.
+              Crear invitaciones para nuevos jugadores y
+              restablecer PIN.
             </p>
 
-            <a href="/admin/opciones" style={{ ...buttonStyle, background: "#4F46E5" }}>
+            <a
+              href="/admin/opciones"
+              style={{
+                ...buttonStyle,
+                background: "#4F46E5",
+              }}
+            >
               ⚙️ Invitaciones y PIN
             </a>
           </section>
@@ -224,7 +307,11 @@ export default function AdminPage() {
             type="button"
             onClick={logout}
             disabled={busy}
-            style={{ ...buttonStyle, background: "#374151", opacity: busy ? 0.7 : 1 }}
+            style={{
+              ...buttonStyle,
+              background: "#374151",
+              opacity: busy ? 0.7 : 1,
+            }}
           >
             {busy ? "Cerrando sesión…" : "Cerrar sesión"}
           </button>

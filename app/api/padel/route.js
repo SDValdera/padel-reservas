@@ -13,9 +13,13 @@ import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 
-// Cookies y duración de las sesiones.
+// ======================================================
+// CONFIGURACIÓN
+// ======================================================
+
 const COOKIE_NAME = "padel_session";
 const SESSION_DAYS = 30;
+
 const ADMIN_COOKIE_NAME = "padel_admin_session";
 const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 const ADMIN_SESSION_MAX_AGE = 8 * 60 * 60;
@@ -56,6 +60,57 @@ function validDate(value) {
   );
 }
 
+function todayLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function validPozoDate(value) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return false;
+  }
+
+  const date = new Date(`${value}T12:00:00.000Z`);
+
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  );
+}
+
+function validPozoTime(value) {
+  if (
+    typeof value !== "string" ||
+    !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value)
+  ) {
+    return false;
+  }
+
+  return value.slice(0, 5) >= "08:00";
+}
+
+function validPozoDuration(value) {
+  const duration = Number(value);
+
+  return (
+    Number.isFinite(duration) &&
+    duration >= 0.5 &&
+    duration <= 6 &&
+    duration * 2 === Math.trunc(duration * 2)
+  );
+}
+
+function validTitularCount(value) {
+  return [4, 8, 12, 16, 20, 24, 28].includes(Number(value));
+}
+
 // ======================================================
 // HASH Y VERIFICACIÓN DE PIN
 // ======================================================
@@ -64,7 +119,7 @@ async function hashPin(pin) {
   const salt = randomBytes(16).toString("hex");
   const derived = await scrypt(pin, salt, 64);
 
-  return "scrypt$" + salt + "$" + derived.toString("hex");
+  return `scrypt$${salt}$${derived.toString("hex")}`;
 }
 
 async function verifyPin(pin, storedHash) {
@@ -181,7 +236,7 @@ function setAdminCookie(response) {
 
   response.cookies.set(
     ADMIN_COOKIE_NAME,
-    expiry + "." + signature,
+    `${expiry}.${signature}`,
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -207,7 +262,7 @@ function clearAdminCookie(response) {
 }
 
 // ======================================================
-// CREACIÓN Y COMPROBACIÓN DE SESIONES DE JUGADORES
+// SESIONES DE JUGADORES
 // ======================================================
 
 async function createSession(accountId) {
@@ -273,7 +328,7 @@ async function getAccountFromRequest(request) {
 }
 
 // ======================================================
-// BÚSQUEDA DE CUENTAS E INVITACIONES
+// CUENTAS E INVITACIONES
 // ======================================================
 
 async function findAccountByName(name) {
@@ -313,7 +368,43 @@ async function findInviteByName(name) {
 }
 
 // ======================================================
-// GET: PARTIDAS Y SESIÓN ACTUAL
+// CONSULTA DE PARTICIPANTES DEL POZO
+// ======================================================
+
+async function getPozoWithPlayers(pozo) {
+  const { data: registrations, error } = await supabaseAdmin
+    .from("pozo_players")
+    .select(
+      "id, account_id, created_at, account:player_accounts(name)"
+    )
+    .eq("pozo_id", pozo.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `No se han podido consultar los participantes: ${error.message}`
+    );
+  }
+
+  const players = (registrations || []).map((item, index) => ({
+    id: item.id,
+    account_id: item.account_id,
+    name: item.account?.name || "Jugador",
+    created_at: item.created_at,
+    status: index < Number(pozo.titular_count)
+      ? "titular"
+      : "reserva",
+  }));
+
+  return {
+    ...pozo,
+    enrolled_count: players.length,
+    players,
+  };
+}
+
+// ======================================================
+// GET: PARTIDAS, SESIÓN ACTUAL Y POZOS
 // ======================================================
 
 export async function GET(request) {
@@ -339,10 +430,33 @@ export async function GET(request) {
     }));
 
     const account = await getAccountFromRequest(request);
+    const today = todayLocalDate();
+
+    const { data: pozosData, error: pozosError } = await supabaseAdmin
+      .from("pozos")
+      .select(
+        "id, date, start_time, duration_hours, titular_count, created_at"
+      )
+      .gte("date", today)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true });
+
+    if (pozosError) {
+      console.error("Error consultando pozos:", pozosError.message);
+      return jsonError("No se han podido cargar los pozos.", 500);
+    }
+
+    const pozos = [];
+
+    for (const pozoItem of pozosData || []) {
+      pozos.push(await getPozoWithPlayers(pozoItem));
+    }
 
     return NextResponse.json(
       {
         players,
+        pozo: pozos[0] || null,
+        pozos,
         account: account
           ? {
               id: account.id,
@@ -376,19 +490,15 @@ export async function POST(request) {
       return jsonError("Acción no válida.");
     }
 
-    // --------------------------------------------------
-    // CONSULTAR SESIÓN DE ADMINISTRADOR
-    // --------------------------------------------------
+    // ==================================================
+    // ADMINISTRACIÓN: SESIÓN
+    // ==================================================
 
     if (action === "admin-status") {
       return NextResponse.json({
         authenticated: isAdminAuthenticated(request),
       });
     }
-
-    // --------------------------------------------------
-    // INICIAR SESIÓN DE ADMINISTRADOR
-    // --------------------------------------------------
 
     if (action === "admin-login") {
       const configuredPassword = process.env.ADMIN_PASSWORD;
@@ -426,19 +536,374 @@ export async function POST(request) {
       );
     }
 
-    // --------------------------------------------------
-    // CERRAR SESIÓN DE ADMINISTRADOR
-    // --------------------------------------------------
-
     if (action === "admin-logout") {
       return clearAdminCookie(
         NextResponse.json({ ok: true })
       );
     }
 
-    // --------------------------------------------------
-    // GENERAR INVITACIÓN PARA UN NUEVO JUGADOR
-    // --------------------------------------------------
+    // ==================================================
+    // ADMINISTRACIÓN: DATOS DEL POZO
+    // ==================================================
+
+    if (action === "admin-pozo-data") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      const today = todayLocalDate();
+
+      const { data: pozosData, error: pozosError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select(
+            "id, date, start_time, duration_hours, titular_count, created_at"
+          )
+          .gte("date", today)
+          .order("date", { ascending: true })
+          .order("start_time", { ascending: true });
+
+      if (pozosError) {
+        console.error("Error consultando pozos:", pozosError.message);
+        return jsonError("No se han podido cargar los pozos.", 500);
+      }
+
+      const { data: accounts, error: accountsError } =
+        await supabaseAdmin
+          .from("player_accounts")
+          .select("id, name, active")
+          .eq("active", true)
+          .order("name", { ascending: true });
+
+      if (accountsError) {
+        console.error(
+          "Error consultando cuentas:",
+          accountsError.message
+        );
+        return jsonError("No se han podido cargar los jugadores.", 500);
+      }
+
+      const pozos = [];
+
+      for (const pozoItem of pozosData || []) {
+        pozos.push(await getPozoWithPlayers(pozoItem));
+      }
+
+      return NextResponse.json({
+        pozos,
+        accounts: (accounts || []).map((item) => ({
+          id: item.id,
+          name: item.name,
+        })),
+      });
+    }
+
+    // ==================================================
+    // ADMINISTRACIÓN: CREAR POZO
+    // ==================================================
+
+    if (action === "admin-create-pozo") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      if (
+        !validPozoDate(body.date) ||
+        body.date < todayLocalDate()
+      ) {
+        return jsonError("Selecciona una fecha de hoy o posterior.");
+      }
+
+      if (!validPozoTime(body.start_time)) {
+        return jsonError(
+          "La hora de inicio debe ser a partir de las 08:00."
+        );
+      }
+
+      if (!validPozoDuration(body.duration_hours)) {
+        return jsonError(
+          "La duración debe estar entre 0,5 y 4 horas, en intervalos de 0,5."
+        );
+      }
+
+      if (!validTitularCount(body.titular_count)) {
+        return jsonError(
+          "El número de titulares debe ser 4, 8, 12, 16, 20, 24 o 28."
+        );
+      }
+
+      const { data: existingPozos, error: existingError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select("id")
+          .eq("date", body.date)
+          .eq("start_time", body.start_time);
+
+      if (existingError) {
+        console.error(
+          "Error comprobando pozos existentes:",
+          existingError.message
+        );
+        return jsonError(
+          "No se ha podido comprobar si ya existe un pozo a esa hora.",
+          500
+        );
+      }
+
+      if ((existingPozos || []).length > 0) {
+        return jsonError(
+          "Ya existe un pozo para esa fecha y hora.",
+          409
+        );
+      }
+
+      const { data: created, error: createError } =
+        await supabaseAdmin
+          .from("pozos")
+          .insert({
+            date: body.date,
+            start_time: body.start_time,
+            duration_hours: Number(body.duration_hours),
+            titular_count: Number(body.titular_count),
+          })
+          .select(
+            "id, date, start_time, duration_hours, titular_count, created_at"
+          )
+          .single();
+
+      if (createError || !created) {
+        console.error(
+          "Error creando pozo:",
+          createError?.message
+        );
+        return jsonError("No se ha podido crear el pozo.", 500);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        pozo: created,
+      });
+    }
+
+    // ==================================================
+    // ADMINISTRACIÓN: AÑADIR JUGADOR AL POZO
+    // ==================================================
+
+    if (action === "admin-pozo-join") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      if (
+        typeof body.pozoId !== "string" ||
+        typeof body.accountId !== "string"
+      ) {
+        return jsonError("Selecciona un pozo y un jugador válidos.");
+      }
+
+      const { data: pozo, error: pozoError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select("id, date")
+          .eq("id", body.pozoId)
+          .maybeSingle();
+
+      if (pozoError || !pozo) {
+        return jsonError("No se ha encontrado el pozo.", 404);
+      }
+
+      if (pozo.date < todayLocalDate()) {
+        return jsonError("Este pozo ya ha pasado.", 409);
+      }
+
+      const { data: selectedAccount, error: accountError } =
+        await supabaseAdmin
+          .from("player_accounts")
+          .select("id, name, active")
+          .eq("id", body.accountId)
+          .maybeSingle();
+
+      if (
+        accountError ||
+        !selectedAccount ||
+        !selectedAccount.active
+      ) {
+        return jsonError(
+          "No se encuentra una cuenta activa para ese jugador.",
+          404
+        );
+      }
+
+      const { data: current, error: currentError } =
+        await supabaseAdmin
+          .from("pozo_players")
+          .select("id, account_id")
+          .eq("pozo_id", body.pozoId);
+
+      if (currentError) {
+        return jsonError(
+          "No se han podido consultar los participantes.",
+          500
+        );
+      }
+
+      if ((current || []).length >= 30) {
+        return jsonError(
+          "El pozo ya tiene el máximo de 30 participantes.",
+          409
+        );
+      }
+
+      if (
+        (current || []).some(
+          (item) => item.account_id === selectedAccount.id
+        )
+      ) {
+        return jsonError(
+          `${selectedAccount.name} ya está apuntado a este pozo.`,
+          409
+        );
+      }
+
+      const { error: insertError } = await supabaseAdmin
+        .from("pozo_players")
+        .insert({
+          pozo_id: body.pozoId,
+          account_id: selectedAccount.id,
+        });
+
+      if (insertError) {
+        console.error(
+          "Error añadiendo jugador al pozo:",
+          insertError.message
+        );
+        return jsonError("No se ha podido añadir al jugador.", 500);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        name: selectedAccount.name,
+      });
+    }
+
+    // ==================================================
+    // ADMINISTRACIÓN: QUITAR JUGADOR DEL POZO
+    // ==================================================
+
+    if (action === "admin-pozo-leave") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      if (typeof body.registrationId !== "string") {
+        return jsonError("La inscripción no es válida.");
+      }
+
+      const { data: registration, error: registrationError } =
+        await supabaseAdmin
+          .from("pozo_players")
+          .select("id, pozo_id")
+          .eq("id", body.registrationId)
+          .maybeSingle();
+
+      if (registrationError || !registration) {
+        return jsonError(
+          "No se ha encontrado esa inscripción.",
+          404
+        );
+      }
+
+      const { data: pozo, error: pozoError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select("date")
+          .eq("id", registration.pozo_id)
+          .maybeSingle();
+
+      if (
+        pozoError ||
+        !pozo ||
+        pozo.date < todayLocalDate()
+      ) {
+        return jsonError(
+          "Este pozo ya ha pasado o no existe.",
+          409
+        );
+      }
+
+      const { error: deleteError } = await supabaseAdmin
+        .from("pozo_players")
+        .delete()
+        .eq("id", body.registrationId);
+
+      if (deleteError) {
+        console.error(
+          "Error quitando jugador del pozo:",
+          deleteError.message
+        );
+        return jsonError(
+          "No se ha podido quitar al jugador del pozo.",
+          500
+        );
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ==================================================
+    // ADMINISTRACIÓN: ELIMINAR POZO
+    // ==================================================
+
+    if (action === "admin-delete-pozo") {
+      if (!isAdminAuthenticated(request)) {
+        return jsonError(
+          "Debes iniciar sesión como administrador.",
+          401
+        );
+      }
+
+      if (typeof body.pozoId !== "string") {
+        return jsonError("El pozo no es válido.");
+      }
+
+      const { data: deleted, error: deleteError } =
+        await supabaseAdmin
+          .from("pozos")
+          .delete()
+          .eq("id", body.pozoId)
+          .select("id")
+          .maybeSingle();
+
+      if (deleteError) {
+        console.error(
+          "Error eliminando pozo:",
+          deleteError.message
+        );
+        return jsonError("No se ha podido eliminar el pozo.", 500);
+      }
+
+      if (!deleted) {
+        return jsonError("No se ha encontrado el pozo.", 404);
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ==================================================
+    // INVITACIONES
+    // ==================================================
 
     if (action === "create-invite") {
       if (!isAdminAuthenticated(request)) {
@@ -509,9 +974,9 @@ export async function POST(request) {
       return NextResponse.json({ name, code });
     }
 
-    // --------------------------------------------------
-    // RESTABLECER PIN DESDE EL PANEL DE ADMINISTRACIÓN
-    // --------------------------------------------------
+    // ==================================================
+    // RESTABLECER PIN DESDE ADMINISTRACIÓN
+    // ==================================================
 
     if (action === "admin-reset-pin") {
       if (!isAdminAuthenticated(request)) {
@@ -584,11 +1049,9 @@ export async function POST(request) {
       });
     }
 
-    // --------------------------------------------------
-    // ELIMINAR UN JUGADOR DE UNA PARTIDA DESDE ADMIN
-    // Solo elimina la inscripción, no la cuenta.
-    // Funciona aunque la pista esté completa o reservada.
-    // --------------------------------------------------
+    // ==================================================
+    // ADMINISTRACIÓN: ELIMINAR JUGADOR DE PARTIDA NORMAL
+    // ==================================================
 
     if (action === "admin-delete-player") {
       if (!isAdminAuthenticated(request)) {
@@ -625,7 +1088,6 @@ export async function POST(request) {
           "Error buscando inscripción para eliminar:",
           findError.message
         );
-
         return jsonError(
           "No se ha podido consultar la inscripción.",
           500
@@ -653,7 +1115,6 @@ export async function POST(request) {
           "Error eliminando jugador desde administración:",
           deleteError.message
         );
-
         return jsonError(
           "No se ha podido eliminar al jugador.",
           500
@@ -675,9 +1136,9 @@ export async function POST(request) {
       });
     }
 
-    // --------------------------------------------------
-    // LISTAR CUENTAS ACTIVAS PARA APUNTAR DESDE ADMIN
-    // --------------------------------------------------
+    // ==================================================
+    // ADMINISTRACIÓN: LISTAR CUENTAS
+    // ==================================================
 
     if (action === "admin-list-accounts") {
       if (!isAdminAuthenticated(request)) {
@@ -696,10 +1157,9 @@ export async function POST(request) {
 
       if (accountsError) {
         console.error(
-          "Error consultando cuentas para administración:",
+          "Error consultando cuentas:",
           accountsError.message
         );
-
         return jsonError(
           "No se han podido cargar los jugadores.",
           500
@@ -714,9 +1174,9 @@ export async function POST(request) {
       });
     }
 
-    // --------------------------------------------------
-    // APUNTAR A UN JUGADOR A UNA PARTIDA DESDE ADMIN
-    // --------------------------------------------------
+    // ==================================================
+    // ADMINISTRACIÓN: AÑADIR JUGADOR A PARTIDA NORMAL
+    // ==================================================
 
     if (action === "admin-join") {
       if (!isAdminAuthenticated(request)) {
@@ -751,10 +1211,9 @@ export async function POST(request) {
 
       if (selectedAccountError) {
         console.error(
-          "Error consultando jugador para inscripción:",
+          "Error consultando jugador:",
           selectedAccountError.message
         );
-
         return jsonError(
           "No se ha podido comprobar la cuenta del jugador.",
           500
@@ -776,10 +1235,9 @@ export async function POST(request) {
 
       if (listError) {
         console.error(
-          "Error consultando plazas de la partida:",
+          "Error consultando plazas:",
           listError.message
         );
-
         return jsonError(
           "No se ha podido consultar la partida.",
           500
@@ -814,7 +1272,6 @@ export async function POST(request) {
           "Error apuntando jugador desde administración:",
           joinError.message
         );
-
         return jsonError(
           "No se ha podido apuntar al jugador. Puede que la plaza haya cambiado.",
           409
@@ -828,9 +1285,9 @@ export async function POST(request) {
       });
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // REGISTRO CON INVITACIÓN
-    // --------------------------------------------------
+    // ==================================================
 
     if (action === "register") {
       const name =
@@ -923,7 +1380,6 @@ export async function POST(request) {
           "Error creando cuenta:",
           createAccountError?.message
         );
-
         return jsonError(
           "No se ha podido crear la cuenta. Comprueba si ya existe.",
           409
@@ -961,9 +1417,9 @@ export async function POST(request) {
       return sessionCookie(response, token);
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // INICIAR SESIÓN DE JUGADOR
-    // --------------------------------------------------
+    // ==================================================
 
     if (action === "login") {
       const name =
@@ -990,14 +1446,12 @@ export async function POST(request) {
       }
 
       const account = (accounts || []).find(
-        (item) => normalizeName(item.name) === normalizeName(name)
+        (item) =>
+          normalizeName(item.name) === normalizeName(name)
       );
 
       if (!account || !account.active) {
-        return jsonError(
-          "Nombre o PIN incorrectos.",
-          401
-        );
+        return jsonError("Nombre o PIN incorrectos.", 401);
       }
 
       if (
@@ -1061,9 +1515,9 @@ export async function POST(request) {
       return sessionCookie(response, token);
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // CERRAR SESIÓN DE JUGADOR
-    // --------------------------------------------------
+    // ==================================================
 
     if (action === "logout") {
       const token = request.cookies.get(COOKIE_NAME)?.value;
@@ -1080,9 +1534,9 @@ export async function POST(request) {
       );
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // OPERACIONES QUE REQUIEREN SESIÓN DE JUGADOR
-    // --------------------------------------------------
+    // ==================================================
 
     const account = await getAccountFromRequest(request);
 
@@ -1103,9 +1557,163 @@ export async function POST(request) {
       );
     }
 
-    // --------------------------------------------------
-    // CAMBIAR PIN DEL JUGADOR
-    // --------------------------------------------------
+    // ==================================================
+    // APUNTARSE AL POZO
+    // ==================================================
+
+    if (action === "pozo-join") {
+      if (typeof body.pozoId !== "string") {
+        return jsonError("El pozo no es válido.");
+      }
+
+      const { data: pozo, error: pozoError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select("id, date")
+          .eq("id", body.pozoId)
+          .maybeSingle();
+
+      if (pozoError || !pozo) {
+        return jsonError("No se ha encontrado el pozo.", 404);
+      }
+
+      if (pozo.date < todayLocalDate()) {
+        return jsonError("Este pozo ya ha pasado.", 409);
+      }
+
+      const { data: current, error: currentError } =
+        await supabaseAdmin
+          .from("pozo_players")
+          .select("id, account_id")
+          .eq("pozo_id", body.pozoId);
+
+      if (currentError) {
+        return jsonError(
+          "No se han podido consultar las plazas del pozo.",
+          500
+        );
+      }
+
+      if ((current || []).length >= 30) {
+        return jsonError(
+          "El pozo está completo: hay 30 participantes.",
+          409
+        );
+      }
+
+      if (
+        (current || []).some(
+          (item) => item.account_id === account.id
+        )
+      ) {
+        return jsonError(
+          "Ya estás apuntado a este pozo.",
+          409
+        );
+      }
+
+      const { error: insertError } = await supabaseAdmin
+        .from("pozo_players")
+        .insert({
+          pozo_id: body.pozoId,
+          account_id: account.id,
+        });
+
+      if (insertError) {
+        console.error(
+          "Error apuntándose al pozo:",
+          insertError.message
+        );
+        return jsonError(
+          "No se ha podido completar la inscripción.",
+          500
+        );
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ==================================================
+    // DESAPUNTARSE DEL POZO
+    // ==================================================
+
+    if (action === "pozo-leave") {
+      if (typeof body.registrationId !== "string") {
+        return jsonError("La inscripción no es válida.");
+      }
+
+      const { data: registration, error: registrationError } =
+        await supabaseAdmin
+          .from("pozo_players")
+          .select("id, pozo_id, account_id")
+          .eq("id", body.registrationId)
+          .maybeSingle();
+
+      if (registrationError || !registration) {
+        return jsonError(
+          "No se ha encontrado esa inscripción.",
+          404
+        );
+      }
+
+      if (registration.account_id !== account.id) {
+        return jsonError(
+          "Solo puedes quitar tu propia inscripción.",
+          403
+        );
+      }
+
+      const { data: pozo, error: pozoError } =
+        await supabaseAdmin
+          .from("pozos")
+          .select("date")
+          .eq("id", registration.pozo_id)
+          .maybeSingle();
+
+      if (
+        pozoError ||
+        !pozo ||
+        pozo.date < todayLocalDate()
+      ) {
+        return jsonError(
+          "Este pozo ya ha pasado o no existe.",
+          409
+        );
+      }
+
+      const { data: deleted, error: deleteError } =
+        await supabaseAdmin
+          .from("pozo_players")
+          .delete()
+          .eq("id", body.registrationId)
+          .eq("account_id", account.id)
+          .select("id")
+          .maybeSingle();
+
+      if (deleteError) {
+        console.error(
+          "Error desapuntándose del pozo:",
+          deleteError.message
+        );
+        return jsonError(
+          "No se ha podido cancelar la inscripción.",
+          500
+        );
+      }
+
+      if (!deleted) {
+        return jsonError(
+          "La inscripción ya no existe.",
+          409
+        );
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ==================================================
+    // CAMBIAR PIN
+    // ==================================================
 
     if (action === "change-pin") {
       const currentPin = body.currentPin;
@@ -1179,7 +1787,6 @@ export async function POST(request) {
           "Error cambiando PIN:",
           updateError.message
         );
-
         return jsonError(
           "No se ha podido cambiar el PIN.",
           500
@@ -1215,9 +1822,9 @@ export async function POST(request) {
       );
     }
 
-    // --------------------------------------------------
-    // APUNTARSE A UNA PARTIDA
-    // --------------------------------------------------
+    // ==================================================
+    // APUNTARSE A PARTIDA NORMAL
+    // ==================================================
 
     if (action === "join") {
       if (!validDate(body.day)) {
@@ -1272,7 +1879,6 @@ export async function POST(request) {
           "Error apuntando jugador:",
           joinError.message
         );
-
         return jsonError(
           "No se ha podido apuntar. Puede que la plaza haya cambiado.",
           409
@@ -1282,9 +1888,9 @@ export async function POST(request) {
       return NextResponse.json({ ok: true });
     }
 
-    // --------------------------------------------------
-    // DESAPUNTARSE DE UNA PARTIDA
-    // --------------------------------------------------
+    // ==================================================
+    // DESAPUNTARSE DE PARTIDA NORMAL
+    // ==================================================
 
     if (action === "leave") {
       if (
@@ -1292,9 +1898,7 @@ export async function POST(request) {
           typeof body.id !== "number") ||
         String(body.id).trim() === ""
       ) {
-        return jsonError(
-          "La inscripción no es válida."
-        );
+        return jsonError("La inscripción no es válida.");
       }
 
       if (!validDate(body.day)) {
@@ -1318,7 +1922,6 @@ export async function POST(request) {
           "Error buscando inscripción:",
           playerError.message
         );
-
         return jsonError(
           "No se ha podido consultar la inscripción.",
           500
@@ -1353,7 +1956,6 @@ export async function POST(request) {
           "Error eliminando inscripción:",
           deleteError.message
         );
-
         return jsonError(
           "No se ha podido eliminar la inscripción.",
           500
@@ -1373,9 +1975,9 @@ export async function POST(request) {
       });
     }
 
-    // --------------------------------------------------
-    // MARCAR UNA PARTIDA COMO RESERVADA
-    // --------------------------------------------------
+    // ==================================================
+    // MARCAR PARTIDA COMO RESERVADA
+    // ==================================================
 
     if (action === "reserve") {
       if (!validDate(body.day)) {
@@ -1443,9 +2045,9 @@ export async function POST(request) {
       return NextResponse.json({ ok: true });
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // ACCIÓN NO RECONOCIDA
-    // --------------------------------------------------
+    // ==================================================
 
     return jsonError("Acción no reconocida.");
   } catch (error) {

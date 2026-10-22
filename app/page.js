@@ -1334,18 +1334,30 @@ export default function Home() {
             )}
 
             {!account.must_change_pin && view === "home" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setView("profile");
-                  setNotice("");
-                }}
-                style={{ ...buttonStyle, backgroundColor: "#2563EB" }}
-              >
-                👤 Mi perfil
-              </button>
-            )}
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("profile");
+                    setNotice("");
+                  }}
+                  style={{ ...buttonStyle, backgroundColor: "#2563EB" }}
+                >
+                  👤 Mi perfil
+                </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/pozo";
+                  }}
+                  style={{ ...buttonStyle, backgroundColor: "#0F766E" }}
+                >
+                  🎾 Ver pozo
+                </button>
+              </>
+            )}
+            
             <button
               onClick={logout}
               disabled={busy}
