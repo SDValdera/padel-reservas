@@ -102,6 +102,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [view, setView] = useState("home");
+  const [showMyMatches, setShowMyMatches] = useState(false);
 
   const { thisWeek, nextWeek } = slots;
 
@@ -248,6 +249,7 @@ export default function Home() {
       setConfirmPin("");
       setNewName("");
       setView("home");
+      setShowMyMatches(false);
 
       setNotice("Sesión cerrada.");
     } catch (error) {
@@ -385,8 +387,7 @@ export default function Home() {
       await loadPlayers();
     }
   }
-
-  // ============================================================
+    // ============================================================
   // 9. APUNTARSE A UNA PARTIDA
   // ============================================================
 
@@ -749,10 +750,32 @@ export default function Home() {
   };
 
   // ============================================================
-  // 17. MOSTRAR UNA PARTIDA
+  // 17. FILTRO DE PARTIDOS Y MOSTRAR UNA PARTIDA
   // ============================================================
 
-  function renderSlot(slot) {
+  // En "Mis partidos" se muestran únicamente horarios en los que
+  // la cuenta autenticada tiene una inscripción propia.
+  const visibleThisWeek = showMyMatches
+    ? thisWeek.filter((slot) =>
+        players.some(
+          (player) =>
+            sameDay(player.day, slot.id) && canLeave(player)
+        )
+      )
+    : thisWeek;
+
+  const visibleNextWeek = showMyMatches
+    ? nextWeek.filter((slot) =>
+        players.some(
+          (player) =>
+            sameDay(player.day, slot.id) && canLeave(player)
+        )
+      )
+    : nextWeek;
+
+  const hasVisibleMyMatches =
+    visibleThisWeek.length > 0 || visibleNextWeek.length > 0;
+      function renderSlot(slot) {
     const playersForDay = players
       .filter((player) => sameDay(player.day, slot.id))
       .sort(
@@ -772,6 +795,7 @@ export default function Home() {
       responsible && canLeave(responsible);
 
     const isFull = playersForDay.length >= 4;
+    const isMyMatch = playersForDay.some((player) => canLeave(player));
 
     const pinChangeRequired =
       account?.must_change_pin === true;
@@ -780,14 +804,18 @@ export default function Home() {
       <article
         key={slot.id}
         style={{
-          border: isFull
-            ? "1px solid #FECACA"
-            : "1px solid #D1FAE5",
+          border: isMyMatch
+            ? "2px solid #16A34A"
+            : isFull
+              ? "1px solid #FECACA"
+              : "1px solid #D1FAE5",
           borderRadius: "16px",
           padding: "18px",
           marginBottom: "16px",
-          backgroundColor: "#FFFFFF",
-          boxShadow: "0 4px 12px rgba(15,23,42,0.07)",
+          backgroundColor: isMyMatch ? "#F0FDF4" : "#FFFFFF",
+          boxShadow: isMyMatch
+            ? "0 4px 14px rgba(22,163,74,0.12)"
+            : "0 4px 12px rgba(15,23,42,0.07)",
           overflowWrap: "anywhere",
           boxSizing: "border-box",
         }}
@@ -1045,8 +1073,7 @@ export default function Home() {
       </article>
     );
   }
-
-  // ============================================================
+    // ============================================================
   // 18. INTERFAZ PRINCIPAL
   // ============================================================
 
@@ -1338,6 +1365,24 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => {
+                    setShowMyMatches((current) => !current);
+                    setNotice("");
+                  }}
+                  disabled={busy}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: showMyMatches ? "#166534" : "#15803D",
+                  }}
+                >
+                  {showMyMatches
+                    ? "📅 Ver todos los partidos"
+                    : "🎾 Mis partidos"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMyMatches(false);
                     setView("profile");
                     setNotice("");
                   }}
@@ -1372,7 +1417,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* Menú de Mi perfil. */}
+          {/* Menú de Mi perfil. */}
       {account && !account.must_change_pin && view === "profile" && (
         <section
           style={{
@@ -1725,23 +1770,79 @@ export default function Home() {
 
       {/* Las dos semanas de partidas. */}
       {view === "home" && !account?.must_change_pin && (
-        <div className="weeks-grid">
-          <section className="week-column">
-            <h2 className="week-heading">
-              📅 Esta semana
-            </h2>
+        <>
+          {showMyMatches && (
+            <div
+              style={{
+                marginBottom: "18px",
+                padding: "14px 16px",
+                borderRadius: "12px",
+                backgroundColor: "#F0FDF4",
+                border: "1px solid #86EFAC",
+                color: "#166534",
+              }}
+            >
+              <strong>🎾 Mis partidos</strong>
+              <p style={{ margin: "5px 0 0", lineHeight: 1.5 }}>
+                Estás viendo únicamente las partidas en las que estás apuntado.
+              </p>
+            </div>
+          )}
 
-            {thisWeek.map(renderSlot)}
-          </section>
+          {showMyMatches && !hasVisibleMyMatches && !loading && (
+            <div
+              style={{
+                marginBottom: "20px",
+                padding: "24px",
+                borderRadius: "14px",
+                backgroundColor: "#FFFFFF",
+                border: "1px solid #D1FAE5",
+                textAlign: "center",
+                color: "#475569",
+              }}
+            >
+              <div style={{ fontSize: "32px", marginBottom: "10px" }}>
+                🎾
+              </div>
 
-          <section className="week-column">
-            <h2 className="week-heading">
-              📅 Próxima semana
-            </h2>
+              <strong>No tienes partidos apuntados.</strong>
 
-            {nextWeek.map(renderSlot)}
-          </section>
-        </div>
+              <p style={{ marginBottom: 0 }}>
+                Pulsa «Ver todos los partidos» para consultar las partidas disponibles.
+              </p>
+            </div>
+          )}
+
+          <div className="weeks-grid">
+            <section className="week-column">
+              <h2 className="week-heading">
+                📅 Esta semana
+              </h2>
+
+              {visibleThisWeek.map(renderSlot)}
+
+              {showMyMatches && visibleThisWeek.length === 0 && hasVisibleMyMatches && (
+                <p style={{ color: "#64748B" }}>
+                  No tienes partidos esta semana.
+                </p>
+              )}
+            </section>
+
+            <section className="week-column">
+              <h2 className="week-heading">
+                📅 Próxima semana
+              </h2>
+
+              {visibleNextWeek.map(renderSlot)}
+
+              {showMyMatches && visibleNextWeek.length === 0 && hasVisibleMyMatches && (
+                <p style={{ color: "#64748B" }}>
+                  No tienes partidos la próxima semana.
+                </p>
+              )}
+            </section>
+          </div>
+        </>
       )}
     </main>
   );
