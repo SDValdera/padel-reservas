@@ -230,11 +230,11 @@ export default function AdminPage() {
         <>
           <section style={panelStyle}>
             <h2 style={{ marginTop: 0 }}>
-              🎾 Gestión de pozos
+              🎾 Gestión de Torneos
             </h2>
 
             <p style={{ color: "#64748B", lineHeight: 1.5 }}>
-              Crear pozos, establecer horarios y duración,
+              Crear Torneos, establecer horarios y duración,
               elegir el número de titulares y gestionar
               participantes y reservas.
             </p>
@@ -246,7 +246,7 @@ export default function AdminPage() {
                 background: "#7C3AED",
               }}
             >
-              🎾 Gestionar pozo
+              🎾 Gestionar Torneo
             </a>
           </section>
 
