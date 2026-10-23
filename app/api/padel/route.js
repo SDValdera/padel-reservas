@@ -1227,44 +1227,12 @@ export async function POST(request) {
         );
       }
 
-      const { data: currentPlayers, error: listError } =
-        await supabaseAdmin
-          .from("players")
-          .select("id, account_id")
-          .eq("day", day);
-
-      if (listError) {
-        console.error(
-          "Error consultando plazas:",
-          listError.message
-        );
-        return jsonError(
-          "No se ha podido consultar la partida.",
-          500
-        );
-      }
-
-      if ((currentPlayers || []).length >= 4) {
-        return jsonError("La partida está completa.", 409);
-      }
-
-      if (
-        (currentPlayers || []).some(
-          (player) => player.account_id === selectedAccount.id
-        )
-      ) {
-        return jsonError(
-          `${selectedAccount.name} ya está apuntado a esta partida.`,
-          409
-        );
-      }
-
-      const { error: joinError } = await supabaseAdmin
-        .from("players")
-        .insert({
-          day,
-          account_id: selectedAccount.id,
-          reserved: false,
+      // La inscripción y la regla de un partido diario
+      // se controlan de forma centralizada en Supabase.
+      const { data: joinResult, error: joinError } =
+        await supabaseAdmin.rpc("join_padel_match", {
+          p_day: day,
+          p_account_id: selectedAccount.id,
         });
 
       if (joinError) {
@@ -1273,7 +1241,14 @@ export async function POST(request) {
           joinError.message
         );
         return jsonError(
-          "No se ha podido apuntar al jugador. Puede que la plaza haya cambiado.",
+          "No se ha podido completar la inscripción.",
+          500
+        );
+      }
+
+      if (!joinResult?.ok) {
+        return jsonError(
+          joinResult?.message || "No se ha podido apuntar al jugador.",
           409
         );
       }
@@ -1282,6 +1257,7 @@ export async function POST(request) {
         ok: true,
         name: selectedAccount.name,
         day,
+        removedDuplicates: joinResult.removed_duplicates ?? 0,
       });
     }
 
@@ -1835,43 +1811,13 @@ export async function POST(request) {
 
       const day = new Date(body.day).toISOString();
 
-      const { data: currentPlayers, error: listError } =
-        await supabaseAdmin
-          .from("players")
-          .select("id, account_id, reserved")
-          .eq("day", day);
-
-      if (listError) {
-        return jsonError(
-          "No se ha podido consultar la partida.",
-          500
-        );
-      }
-
-      if ((currentPlayers || []).length >= 4) {
-        return jsonError(
-          "La partida está completa.",
-          409
-        );
-      }
-
-      if (
-        (currentPlayers || []).some(
-          (player) => player.account_id === account.id
-        )
-      ) {
-        return jsonError(
-          "Ya estás apuntado a esta partida.",
-          409
-        );
-      }
-
-      const { error: joinError } = await supabaseAdmin
-        .from("players")
-        .insert({
-          day,
-          account_id: account.id,
-          reserved: false,
+      // La inscripción se gestiona mediante una función SQL
+      // que bloquea las operaciones del mismo día y evita
+      // que el jugador mantenga dos partidas ese día.
+      const { data: joinResult, error: joinError } =
+        await supabaseAdmin.rpc("join_padel_match", {
+          p_day: day,
+          p_account_id: account.id,
         });
 
       if (joinError) {
@@ -1880,12 +1826,23 @@ export async function POST(request) {
           joinError.message
         );
         return jsonError(
-          "No se ha podido apuntar. Puede que la plaza haya cambiado.",
+          "No se ha podido completar la inscripción.",
+          500
+        );
+      }
+
+      if (!joinResult?.ok) {
+        return jsonError(
+          joinResult?.message || "No se ha podido apuntar a la partida.",
           409
         );
       }
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        message: joinResult.message,
+        removedDuplicates: joinResult.removed_duplicates ?? 0,
+      });
     }
 
     // ==================================================
