@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -74,6 +75,36 @@ function sameDay(first, second) {
     new Date(first).getTime() ===
     new Date(second).getTime()
   );
+}
+
+// ============================================================
+// 1.1. IDENTIFICAR AL RESPONSABLE DE UNA PARTIDA
+// ============================================================
+
+// Los jugadores deben llegar ordenados por created_at.
+// Si el cuarto participante es un invitado, el responsable
+// será el anfitrión que lo añadió.
+// Si el cuarto participante es un jugador normal, será él.
+
+function getResponsiblePlayer(playersForDay) {
+  if (!playersForDay || playersForDay.length !== 4) {
+    return null;
+  }
+
+  const fourthPlayer = playersForDay[3];
+
+  if (!fourthPlayer.is_guest) {
+    return fourthPlayer;
+  }
+
+  const host = playersForDay.find(
+    (player) =>
+      !player.is_guest &&
+      String(player.account_id) ===
+        String(fourthPlayer.invited_by)
+  );
+
+  return host || null;
 }
 
 // ============================================================
@@ -301,10 +332,10 @@ export default function Home() {
 
     try {
       const result = await apiRequest("change-name", {
-        name: cleanName,
+        newName: cleanName,
       });
 
-      const updatedName = result.name || cleanName;
+      const updatedName = result.account?.name || cleanName;
 
       setAccount((current) =>
         current
@@ -336,7 +367,7 @@ export default function Home() {
 
     if (busy) return;
 
-    if (!/^\d{8,12}$/.test(currentPin)) {
+    if (!account?.must_change_pin && !/^\d{8,12}$/.test(currentPin)) {
       setNotice("Introduce tu PIN actual.");
       return;
     }
@@ -351,7 +382,7 @@ export default function Home() {
       return;
     }
 
-    if (currentPin === newPin) {
+    if (!account?.must_change_pin && currentPin === newPin) {
       setNotice("El nuevo PIN debe ser diferente del actual.");
       return;
     }
@@ -387,7 +418,8 @@ export default function Home() {
       await loadPlayers();
     }
   }
-    // ============================================================
+
+  // ============================================================
   // 9. APUNTARSE A UNA PARTIDA
   // ============================================================
 
@@ -433,21 +465,97 @@ export default function Home() {
   }
 
   // ============================================================
-  // 10. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
+  // 10. AÑADIR INVITADO A UNA PARTIDA
   // ============================================================
 
-  function canLeave(player) {
-    return Boolean(
-      account &&
-        player?.name &&
-        account.name &&
-        player.name.trim().toLowerCase() ===
-          account.name.trim().toLowerCase()
+  async function addGuest(day) {
+    if (!account) {
+      setNotice("Inicia sesión para añadir un invitado.");
+      return;
+    }
+
+    if (account.must_change_pin) {
+      setNotice(
+        "Debes cambiar tu PIN temporal antes de continuar."
+      );
+      return;
+    }
+
+    if (busy) return;
+
+    const playersForDay = players.filter((player) =>
+      sameDay(player.day, day)
     );
+
+    const isHost = playersForDay.some(
+      (player) =>
+        !player.is_guest &&
+        String(player.account_id) === String(account.id)
+    );
+
+    if (!isHost) {
+      setNotice(
+        "Debes apuntarte a la partida antes de añadir invitados."
+      );
+      return;
+    }
+
+    if (playersForDay.length >= 4) {
+      setNotice("La partida está completa.");
+      return;
+    }
+
+    const myGuests = playersForDay.filter(
+      (player) =>
+        player.is_guest &&
+        String(player.invited_by) === String(account.id)
+    );
+
+    if (myGuests.length >= 3) {
+      setNotice(
+        "Puedes añadir un máximo de tres invitados por partida."
+      );
+      return;
+    }
+
+    setBusy(true);
+    setNotice("");
+
+    try {
+      const result = await apiRequest("add-guest", { day });
+
+      await loadPlayers();
+
+      setNotice(
+        result.message || "Invitado añadido correctamente."
+      );
+    } catch (error) {
+      setNotice(
+        error.message || "No se ha podido añadir al invitado."
+      );
+
+      await loadPlayers();
+    } finally {
+      setBusy(false);
+    }
   }
 
   // ============================================================
-  // 11. DESAPUNTARSE
+  // 11. COMPROBAR PROPIETARIO DE UNA INSCRIPCIÓN
+  // ============================================================
+
+  function canLeave(player) {
+    if (!account || !player) return false;
+
+    if (player.is_guest) {
+      return String(player.invited_by) === String(account.id);
+    }
+
+    return String(player.account_id) === String(account.id);
+  }
+
+  // ============================================================
+  // 12. DESAPUNTARSE O ELIMINAR UN INVITADO
   // ============================================================
 
   async function leave(id) {
@@ -476,7 +584,7 @@ export default function Home() {
 
     if (!canLeave(player)) {
       setNotice(
-        "Solo puedes desapuntar tu propia inscripción."
+        "Solo puedes eliminar tu propia inscripción o tus invitados."
       );
       return;
     }
@@ -493,14 +601,16 @@ export default function Home() {
       await loadPlayers();
 
       setNotice(
-        "Te has desapuntado de la partida correctamente."
+        player.is_guest
+          ? "Invitado eliminado de la partida."
+          : "Te has desapuntado de la partida correctamente."
       );
     } catch (error) {
       console.error("Error al desapuntarse:", error);
 
       setNotice(
         error.message ||
-          "No se ha podido eliminar tu inscripción."
+          "No se ha podido eliminar la inscripción."
       );
 
       await loadPlayers();
@@ -510,7 +620,7 @@ export default function Home() {
   }
 
   // ============================================================
-  // 12. ABRIR RESASPORTS SEGÚN EL DISPOSITIVO
+  // 13. ABRIR RESASPORTS SEGÚN EL DISPOSITIVO
   // ============================================================
 
   function openResasports() {
@@ -590,7 +700,7 @@ export default function Home() {
   }
 
   // ============================================================
-  // 13. AVISAR POR WHATSAPP
+  // 14. AVISAR POR WHATSAPP
   // ============================================================
 
   function notifyWhatsApp(slot, playersForDay) {
@@ -601,14 +711,23 @@ export default function Home() {
     );
 
     if (orderedPlayers.length !== 4) {
-      setNotice("La partida debe tener cuatro jugadores.");
+      setNotice("La partida debe tener cuatro participantes.");
       return;
     }
 
+    // Si el cuarto participante es un invitado, su anfitrión
+    // aparece como responsable en el mensaje de WhatsApp.
+    const responsiblePlayer =
+      getResponsiblePlayer(orderedPlayers);
+
     const playersList = orderedPlayers
       .map((player, index) => {
+        const isResponsiblePlayer =
+          responsiblePlayer &&
+          String(player.id) === String(responsiblePlayer.id);
+
         const responsibleLabel =
-          index === 3 ? " 👑 Responsable" : "";
+          isResponsiblePlayer ? " 👑 Responsable" : "";
 
         return `${index + 1}. ${player.name}${responsibleLabel}`;
       })
@@ -632,78 +751,91 @@ export default function Home() {
   }
 
   // ============================================================
-  // 14. MARCAR RESERVA
+  // 15. MARCAR RESERVA
   // ============================================================
 
-  async function markReserved(id) {
-    if (!account) {
-      setNotice("Inicia sesión para continuar.");
-      return;
-    }
-
-    if (account.must_change_pin) {
-      setNotice(
-        "Debes cambiar tu PIN temporal antes de continuar."
-      );
-      return;
-    }
-
-    if (busy) return;
-
-    const responsible = players.find(
-      (player) => String(player.id) === String(id)
-    );
-
-    if (!responsible) {
-      setNotice("No se ha encontrado al responsable.");
-      return;
-    }
-
-    const playersForDay = players
-      .filter((player) => sameDay(player.day, responsible.day))
-      .sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() -
-          new Date(b.created_at).getTime()
-      );
-
-    if (
-      playersForDay.length !== 4 ||
-      String(playersForDay[3].id) !== String(id)
-    ) {
-      setNotice("Solo el cuarto jugador puede reservar.");
-      return;
-    }
-
-    if (!canLeave(responsible)) {
-      setNotice("Solo el responsable puede reservar.");
-      return;
-    }
-
-    setBusy(true);
-    setNotice("");
-
-    try {
-      await apiRequest("reserve", {
-        id,
-        day: responsible.day,
-      });
-
-      await loadPlayers();
-
-      setNotice(
-        "Marcada en la web. Comprueba y completa la reserva en ResaSports."
-      );
-    } catch (error) {
-      setNotice(error.message);
-      await loadPlayers();
-    } finally {
-      setBusy(false);
-    }
+async function markReserved(id) {
+  if (!account) {
+    setNotice("Inicia sesión para continuar.");
+    return;
   }
 
+  if (account.must_change_pin) {
+    setNotice("Debes cambiar tu PIN temporal antes de continuar.");
+    return;
+  }
+
+  if (busy) return;
+
+  const selectedPlayer = players.find(
+    (player) => String(player.id) === String(id)
+  );
+
+  if (!selectedPlayer) {
+    setNotice("No se ha encontrado al responsable.");
+    return;
+  }
+
+  const playersForDay = players
+    .filter((player) => sameDay(player.day, selectedPlayer.day))
+    .sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() -
+        new Date(b.created_at).getTime()
+    );
+
+  if (playersForDay.length !== 4) {
+    setNotice("La partida debe tener cuatro participantes.");
+    return;
+  }
+
+  // La cuarta plaza determina quién debe gestionar la reserva.
+  const fourthPlayer = playersForDay[3];
+
+  // Si el cuarto es invitado, el responsable es su anfitrión.
+  const responsible = fourthPlayer.is_guest
+    ? playersForDay.find(
+        (player) =>
+          !player.is_guest &&
+          String(player.account_id) === String(fourthPlayer.invited_by)
+      )
+    : fourthPlayer;
+
+  if (!responsible) {
+    setNotice("No se ha encontrado al anfitrión responsable del invitado.");
+    return;
+  }
+
+  if (!canLeave(responsible)) {
+    setNotice("Solo el responsable o su anfitrión puede reservar.");
+    return;
+  }
+
+  setBusy(true);
+  setNotice("");
+
+  try {
+    await apiRequest("reserve", {
+      id: responsible.id,
+      day: responsible.day,
+    });
+
+    await loadPlayers();
+
+    setNotice(
+      "Reserva marcada correctamente en la web. Comprueba y completa la reserva en ResaSports."
+    );
+  } catch (error) {
+    console.error("Error al marcar la reserva:", error);
+    setNotice(error.message || "No se ha podido marcar la reserva.");
+    await loadPlayers();
+  } finally {
+    setBusy(false);
+  }
+}
+
   // ============================================================
-  // 15. CARGA INICIAL
+  // 16. CARGA INICIAL
   // ============================================================
 
   useEffect(() => {
@@ -722,7 +854,7 @@ export default function Home() {
   }, [account?.name, account?.must_change_pin]);
 
   // ============================================================
-  // 16. ESTILOS COMUNES
+  // 17. ESTILOS COMUNES
   // ============================================================
 
   const buttonStyle = {
@@ -750,11 +882,9 @@ export default function Home() {
   };
 
   // ============================================================
-  // 17. FILTRO DE PARTIDOS Y MOSTRAR UNA PARTIDA
+  // 18. FILTRO DE PARTIDOS Y MOSTRAR UNA PARTIDA
   // ============================================================
 
-  // En "Mis partidos" se muestran únicamente horarios en los que
-  // la cuenta autenticada tiene una inscripción propia.
   const visibleThisWeek = showMyMatches
     ? thisWeek.filter((slot) =>
         players.some(
@@ -775,7 +905,8 @@ export default function Home() {
 
   const hasVisibleMyMatches =
     visibleThisWeek.length > 0 || visibleNextWeek.length > 0;
-      function renderSlot(slot) {
+
+  function renderSlot(slot) {
     const playersForDay = players
       .filter((player) => sameDay(player.day, slot.id))
       .sort(
@@ -784,13 +915,18 @@ export default function Home() {
           new Date(b.created_at).getTime()
       );
 
+    // RESPONSABLE CORREGIDO:
+    // si el cuarto participante es invitado, el responsable
+    // pasa a ser el anfitrión que lo añadió.
     const responsible =
-      playersForDay.length === 4
-        ? playersForDay[3]
-        : null;
+      getResponsiblePlayer(playersForDay);
 
-    const reserved = responsible?.reserved === true;
+   const reserved = playersForDay.some(
+   (player) => player.reserved === true
+   );
 
+    // Solo el responsable (o el anfitrión, si corresponde)
+    // puede gestionar la reserva.
     const isResponsible =
       responsible && canLeave(responsible);
 
@@ -799,6 +935,18 @@ export default function Home() {
 
     const pinChangeRequired =
       account?.must_change_pin === true;
+
+    const isMyPlayerRegistered = playersForDay.some(
+      (player) =>
+        !player.is_guest &&
+        String(player.account_id) === String(account?.id)
+    );
+
+    const myGuestsCount = playersForDay.filter(
+      (player) =>
+        player.is_guest &&
+        String(player.invited_by) === String(account?.id)
+    ).length;
 
     return (
       <article
@@ -833,6 +981,7 @@ export default function Home() {
           🎾 {slot.label}
         </h3>
 
+        {/* Contador de plazas. Los invitados cuentan como participantes. */}
         <div
           style={{
             display: "inline-flex",
@@ -860,6 +1009,7 @@ export default function Home() {
         {/* Botón para apuntarse. */}
         <div>
           <button
+            type="button"
             onClick={() => join(slot.id)}
             disabled={
               isFull || busy || !account || pinChangeRequired
@@ -888,7 +1038,49 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Lista de jugadores con nombres en negrita. */}
+        {/* Botón para añadir invitado: solo aparece al anfitrión apuntado. */}
+        {account && isMyPlayerRegistered && (
+          <div style={{ marginTop: "10px" }}>
+            <button
+              type="button"
+              onClick={() => addGuest(slot.id)}
+              disabled={
+                isFull ||
+                busy ||
+                pinChangeRequired ||
+                myGuestsCount >= 3
+              }
+              title={
+                pinChangeRequired
+                  ? "Primero debes cambiar el PIN"
+                  : isFull
+                    ? "La partida está completa"
+                    : myGuestsCount >= 3
+                      ? "Ya tienes tres invitados en esta partida"
+                      : "Añadir un invitado a esta partida"
+              }
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#2563EB",
+                opacity:
+                  isFull ||
+                  busy ||
+                  pinChangeRequired ||
+                  myGuestsCount >= 3
+                    ? 0.7
+                    : 1,
+              }}
+            >
+              {isFull
+                ? "Partida completa"
+                : myGuestsCount >= 3
+                  ? "Máximo de invitados alcanzado"
+                  : "＋ Añadir invitado"}
+            </button>
+          </div>
+        )}
+
+        {/* Lista de jugadores e invitados. */}
         <div
           style={{
             marginTop: "16px",
@@ -896,12 +1088,16 @@ export default function Home() {
             gap: "8px",
           }}
         >
-          {playersForDay.map((player, index) => {
-            const isResponsiblePlayer = index === 3;
+          {playersForDay.map((player) => {
+            // La corona ya no depende de la posición visual.
+            // Se muestra en la fila del responsable real.
+            const isResponsiblePlayer =
+              responsible &&
+              String(player.id) === String(responsible.id);
 
             return (
               <div
-                key={player.id}
+                key={`${player.is_guest ? "guest" : "player"}-${player.id}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -934,7 +1130,7 @@ export default function Home() {
                     : ""}
                 </span>
 
-                {/* Solo se muestra al propietario de la inscripción. */}
+                {/* El jugador puede quitarse; el anfitrión puede quitar su invitado. */}
                 {canLeave(player) && (
                   <button
                     type="button"
@@ -943,7 +1139,9 @@ export default function Home() {
                     title={
                       pinChangeRequired
                         ? "Primero debes cambiar tu PIN"
-                        : "Eliminar tu inscripción"
+                        : player.is_guest
+                          ? "Eliminar este invitado"
+                          : "Eliminar tu inscripción"
                     }
                     style={{
                       ...buttonStyle,
@@ -953,7 +1151,7 @@ export default function Home() {
                         busy || pinChangeRequired ? 0.7 : 1,
                     }}
                   >
-                    Desapuntar
+                    {player.is_guest ? "Quitar invitado" : "Desapuntar"}
                   </button>
                 )}
               </div>
@@ -1073,8 +1271,9 @@ export default function Home() {
       </article>
     );
   }
-    // ============================================================
-  // 18. INTERFAZ PRINCIPAL
+
+  // ============================================================
+  // 19. INTERFAZ PRINCIPAL
   // ============================================================
 
   return (
@@ -1404,6 +1603,7 @@ export default function Home() {
             )}
 
             <button
+              type="button"
               onClick={logout}
               disabled={busy}
               style={{
@@ -1417,7 +1617,7 @@ export default function Home() {
         </section>
       )}
 
-          {/* Menú de Mi perfil. */}
+      {/* Menú de Mi perfil. */}
       {account && !account.must_change_pin && view === "profile" && (
         <section
           style={{
@@ -1664,7 +1864,7 @@ export default function Home() {
               minLength={8}
               maxLength={12}
               pattern="[0-9]{8,12}"
-              required
+              required={!account.must_change_pin}
               value={currentPin}
               onChange={(event) =>
                 setCurrentPin(
@@ -1821,11 +2021,13 @@ export default function Home() {
 
               {visibleThisWeek.map(renderSlot)}
 
-              {showMyMatches && visibleThisWeek.length === 0 && hasVisibleMyMatches && (
-                <p style={{ color: "#64748B" }}>
-                  No tienes partidos esta semana.
-                </p>
-              )}
+              {showMyMatches &&
+                visibleThisWeek.length === 0 &&
+                hasVisibleMyMatches && (
+                  <p style={{ color: "#64748B" }}>
+                    No tienes partidos esta semana.
+                  </p>
+                )}
             </section>
 
             <section className="week-column">
@@ -1835,11 +2037,13 @@ export default function Home() {
 
               {visibleNextWeek.map(renderSlot)}
 
-              {showMyMatches && visibleNextWeek.length === 0 && hasVisibleMyMatches && (
-                <p style={{ color: "#64748B" }}>
-                  No tienes partidos la próxima semana.
-                </p>
-              )}
+              {showMyMatches &&
+                visibleNextWeek.length === 0 &&
+                hasVisibleMyMatches && (
+                  <p style={{ color: "#64748B" }}>
+                    No tienes partidos la próxima semana.
+                  </p>
+                )}
             </section>
           </div>
         </>
